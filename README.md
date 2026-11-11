@@ -26,12 +26,12 @@ poetry run uvicorn src.main:app --reload
 ```
 
 ## Хто за що відповідає
-| Домен | Папка | Власник |
-|---|---|---|
-| Інфраструктура, CI/CD, тестові фікстури | `src/core`, `.github`, `tests/conftest.py` | P1 |
-| Авторизація, JWT | `src/accounts` | P2 |
-| Профіль, адмінка юзерів, email, Celery, MinIO | `src/accounts`, `src/notifications`, `src/tasks`, `src/storage` | P3 |
-| Каталог фільмів | `src/movies` | P4 |
-| Лайки, коментарі, рейтинг, обране | `src/interactions` | P5 |
-| Кошик і замовлення | `src/cart`, `src/orders` | P6 |
-| Оплата | `src/payments` | P7 |
+| Домен | Папка | 
+|---|---|
+| Інфраструктура, CI/CD, тестові фікстури | `src/core`, `.github`, `tests/conftest.py` | 
+| Авторизація, JWT | `src/accounts` |
+| Профіль, адмінка юзерів, email, Celery, MinIO | `src/accounts`, `src/notifications`, `src/tasks`, `src/storage` |
+| Каталог фільмів | `src/movies` |
+| Лайки, коментарі, рейтинг, обране | `src/interactions` |
+| Кошик і замовлення | `src/cart`, `src/orders` |
+| Оплата | `src/payments` |
