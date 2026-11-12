@@ -1,13 +1,21 @@
 """Unit tests for ``src.accounts.security`` (password strength validation)."""
 
+from datetime import datetime, timedelta, timezone
+
+import jwt
 import pytest
 
+from src.accounts.enums import UserGroupEnum
 from src.accounts.security import (
     MAX_PASSWORD_BYTES,
+    create_access_token,
+    decode_token,
     hash_password,
     validate_password_strength,
     verify_password,
 )
+from src.core.config import settings
+from src.core.exceptions import UnauthorizedError
 
 
 def test_validate_password_strength_accepts_strong_password() -> None:
@@ -72,3 +80,51 @@ def test_verify_password_rejects_too_long_password() -> None:
     hashed = hash_password("Str0ng!Pass")
 
     assert verify_password("Aa1!" + "a" * MAX_PASSWORD_BYTES, hashed) is False
+
+
+def test_access_token_contains_agreed_payload() -> None:
+    token = create_access_token(user_id=42, group=UserGroupEnum.MODERATOR)
+
+    payload = decode_token(token)
+
+    assert payload["user_id"] == 42
+    assert payload["group"] == "MODERATOR"
+    assert set(payload) == {"user_id", "group", "exp"}
+
+
+def test_access_token_expires_after_configured_ttl() -> None:
+    token = create_access_token(user_id=1, group=UserGroupEnum.USER)
+
+    exp = datetime.fromtimestamp(decode_token(token)["exp"], tz=timezone.utc)
+    expected = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_TTL_MINUTES)
+
+    assert abs((exp - expected).total_seconds()) < 5
+
+
+def test_decode_token_rejects_expired_token() -> None:
+    payload = {
+        "user_id": 1,
+        "group": "USER",
+        "exp": datetime.now(timezone.utc) - timedelta(seconds=1),
+    }
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+    with pytest.raises(UnauthorizedError):
+        decode_token(token)
+
+
+def test_decode_token_rejects_wrong_signature() -> None:
+    payload = {
+        "user_id": 1,
+        "group": "USER",
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+    }
+    token = jwt.encode(payload, "another-secret-key-that-is-long-enough", algorithm="HS256")
+
+    with pytest.raises(UnauthorizedError):
+        decode_token(token)
+
+
+def test_decode_token_rejects_garbage() -> None:
+    with pytest.raises(UnauthorizedError):
+        decode_token("not-a-jwt")
