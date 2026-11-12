@@ -11,7 +11,7 @@ from src.accounts.enums import UserGroupEnum
 from src.accounts.models import User, UserGroup, ActivationToken
 from src.accounts.security import hash_password, generate_token
 from src.core.config import settings
-from src.core.exceptions import ConflictError
+from src.core.exceptions import ConflictError, BadRequestError
 from src.notifications.service import send_email
 
 
@@ -102,5 +102,42 @@ async def register_user(db: AsyncSession, email: str, password: str) -> User:
     )
 
     await db.refresh(user)
+
+    return user
+
+
+async def activate_user(db: AsyncSession, token: str) -> User:
+    """Activate the account the activation token belongs to.
+
+    The token is deleted after a successful activation, so it can be used only once.
+
+    Args:
+        db: Database session.
+        token: Activation token from the email link.
+
+    Returns:
+        The activated user.
+
+    Raises:
+        BadRequestError: If the token does not exist or has expired.
+    """
+    activation_token = await db.scalar(
+        select(ActivationToken).where(ActivationToken.token == token)
+    )
+    if activation_token is None:
+        raise BadRequestError("Invalid activation token")
+
+    expires_at = activation_token.expires_at
+    if expires_at.tzinfo is None:
+        # SQLite returns naive datetimes, Postgres aware ones.
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise BadRequestError("Activation token has expired")
+
+    user = await db.scalar(select(User).where(User.id == activation_token.user_id))
+
+    user.is_active = True
+    await db.delete(activation_token)
+    await db.commit()
 
     return user
