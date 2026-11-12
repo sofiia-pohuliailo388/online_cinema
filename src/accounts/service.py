@@ -12,6 +12,7 @@ from src.accounts.models import User, UserGroup, ActivationToken
 from src.accounts.security import hash_password, generate_token
 from src.core.config import settings
 from src.core.exceptions import ConflictError
+from src.notifications.service import send_email
 
 
 async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
@@ -28,6 +29,18 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
         select(User).options(selectinload(User.group)).where(User.id == user_id),
     )
     return result.scalar_one_or_none()
+
+
+def build_activation_link(token: str) -> str:
+    """Build the link from the activation email.
+
+    Args:
+        token: Activation token of the user.
+
+    Returns:
+        Absolute URL of the activation endpoint with the token as a query parameter.
+    """
+    return f"{settings.APP_BASE_URL}/api/v1/accounts/activate?token={token}"
 
 
 async def register_user(db: AsyncSession, email: str, password: str) -> User:
@@ -64,13 +77,13 @@ async def register_user(db: AsyncSession, email: str, password: str) -> User:
     db.add(user)
     await db.flush()
 
-    token = ActivationToken(
+    activation_token = ActivationToken(
         user_id=user.id,
         token=generate_token(),
         expires_at=datetime.now(timezone.utc)
         + timedelta(hours=settings.ACTIVATION_TOKEN_TTL_HOURS),
     )
-    db.add(token)
+    db.add(activation_token)
 
     try:
         await db.commit()
@@ -79,5 +92,15 @@ async def register_user(db: AsyncSession, email: str, password: str) -> User:
         await db.rollback()
         raise ConflictError("User with this email already exists") from exc
 
+    send_email(
+        to=user.email,
+        subject="Activation link",
+        template="activation.html",
+        context={
+            "link": build_activation_link(activation_token.token),
+        },
+    )
+
     await db.refresh(user)
+
     return user
