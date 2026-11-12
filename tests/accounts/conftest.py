@@ -41,3 +41,12 @@ def create_user(db_session: AsyncSession) -> CreateUser:
         return user
 
     return _create
+
+
+@pytest.fixture
+async def user_group(db_session: AsyncSession) -> UserGroup:
+    """The default ``USER`` group, as created by the ``seed user groups`` migration."""
+    group = UserGroup(name=UserGroupEnum.USER)
+    db_session.add(group)
+    await db_session.commit()
+    return group
