@@ -2,6 +2,7 @@
 
 To add your domain: import its ``router`` and add one ``include_router`` line.
 """
+
 from fastapi import FastAPI
 
 from src.core.exceptions import register_exception_handlers

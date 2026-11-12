@@ -6,6 +6,7 @@ Naming convention for every entity ``X``:
     * ``XUpdate`` - request body for PATCH (all fields optional)
     * ``XRead``   - response model (``from_attributes=True``)
 """
+
 from pydantic import BaseModel, ConfigDict, Field
 
 

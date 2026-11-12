@@ -11,6 +11,7 @@ Usage::
     # router
     return Page[GenreRead].create([GenreRead.model_validate(i) for i in items], total, pagination)
 """
+
 import math
 from typing import Any, Generic, TypeVar
 

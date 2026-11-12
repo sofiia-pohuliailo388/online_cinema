@@ -16,6 +16,7 @@ Usage::
 The returned user object must expose ``user.id`` and ``user.group.name`` (a ``UserGroupEnum``).
 In tests use the ``login_as`` fixture from ``tests/conftest.py`` instead of real tokens.
 """
+
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 

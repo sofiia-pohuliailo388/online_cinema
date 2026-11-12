@@ -10,6 +10,7 @@ Usage in a router::
 
 Rule: routers only pass ``db`` to services. Queries and ``commit()`` live in services.
 """
+
 from collections.abc import AsyncGenerator
 from typing import Annotated
 

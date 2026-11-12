@@ -5,6 +5,7 @@ Usage::
     stmt = select(Movie).join(Favorite).where(Favorite.user_id == user.id)
     stmt = apply_movie_filters(stmt, filters)
 """
+
 from typing import Any
 
 from sqlalchemy import Select
