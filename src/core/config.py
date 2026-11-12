@@ -8,6 +8,7 @@ Usage::
 
 Add new settings here (with a safe default for local dev) and to ``.env.example``.
 """
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 

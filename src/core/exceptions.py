@@ -10,6 +10,7 @@ Usage in a service::
     if genre is None:
         raise NotFoundError(f"Genre {genre_id} not found")
 """
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel

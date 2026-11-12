@@ -1,4 +1,5 @@
 """Enums of the accounts domain (spec: UserGroupEnum, GenderEnum)."""
+
 from enum import StrEnum
 
 
