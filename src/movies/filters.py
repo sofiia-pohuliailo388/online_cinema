@@ -1,8 +1,7 @@
 from typing import Any, Optional
 from fastapi import Query
 from sqlalchemy import Select
-from src.movies.models import Movie
-
+from src.movies.models import Genre, Movie
 
 """Catalog filtering / sorting / search - CONTRACT used by P5 for favorites (owner: P4).
 
@@ -45,23 +44,23 @@ class MovieFilterParams:
         self.sort_order = sort_order
 
 
-def apply_movie_filters(stmt: Select[Any], filters: Any) -> Select[Any]:
+def apply_movie_filters(stmt: Select[Any], filters: MovieFilterParams) -> Select[Any]:
     """Apply filters (year, imdb, genre), sorting (price, year, votes) and search.
 
     Implements the official team contract used across domains (e.g., favorites).
     """
-    if getattr(filters, "search", None):
+    if filters.search:
         stmt = stmt.where(Movie.name.ilike(f"%{filters.search}%"))
 
-    if getattr(filters, "genre_id", None) is not None:
-        stmt = stmt.where(Movie.genres.any(id=filters.genre_id))
+    if filters.genre_id is not None:
+        stmt = stmt.where(Movie.genres.any(Genre.id == filters.genre_id))
 
-    if getattr(filters, "year_from", None) is not None:
+    if filters.year_from is not None:
         stmt = stmt.where(Movie.year >= filters.year_from)
-    if getattr(filters, "year_to", None) is not None:
+    if filters.year_to is not None:
         stmt = stmt.where(Movie.year <= filters.year_to)
 
-    if getattr(filters, "min_imdb", None) is not None:
+    if filters.min_imdb is not None:
         stmt = stmt.where(Movie.imdb >= filters.min_imdb)
 
     sort_column_map = {
@@ -72,8 +71,8 @@ def apply_movie_filters(stmt: Select[Any], filters: Any) -> Select[Any]:
         "name": Movie.name,
     }
 
-    sort_by = getattr(filters, "sort_by", "year")
-    sort_order = getattr(filters, "sort_order", "desc")
+    sort_by = filters.sort_by or "year"
+    sort_order = filters.sort_order or "desc"
 
     sort_col = sort_column_map.get(sort_by, Movie.year)
 
