@@ -6,7 +6,6 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 
 ########## Тестова версія модулю для перевірки роботи страйпу
 def create_test_checkout_session(success_url: str, cancel_url: str) -> dict:
-    """Створює тестову сесію чекауту без прив'язки до внутрішніх модель проєкту."""
     try:
         session = stripe.checkout.Session.create(
             payment_method_types=["card"],
@@ -35,7 +34,6 @@ def create_test_checkout_session(success_url: str, cancel_url: str) -> dict:
 
 
 def verify_stripe_webhook(payload: bytes, sig_header: str) -> stripe.Event:
-    """Перевіряє криптографічний підпис події вебхука від Stripe."""
     try:
         event = stripe.Webhook.construct_event(
             payload=payload,
