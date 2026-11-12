@@ -32,7 +32,7 @@ class MovieReaction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id"))
 
     is_like: Mapped[bool] = mapped_column(Boolean, nullable=False)
@@ -45,11 +45,11 @@ class Comment(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id"))
 
     parent_id: Mapped[int | None] = mapped_column(
-        ForeignKey("comments.id"),
+        ForeignKey("comments.id", ondelete="SET NULL"),
         nullable=True,
     )
 
@@ -77,8 +77,8 @@ class CommentLike(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    comment_id: Mapped[int] = mapped_column(ForeignKey("comments.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    comment_id: Mapped[int] = mapped_column(ForeignKey("comments.id", ondelete="CASCADE"))
 
 
 class Rating(Base):
@@ -100,7 +100,7 @@ class Rating(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id"))
 
     score: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -121,5 +121,5 @@ class Favorite(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id"))
