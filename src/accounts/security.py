@@ -1,9 +1,11 @@
 """Security helpers of the accounts domain: password validation, hashing and JWT."""
+
 from datetime import timezone, timedelta, datetime
 from typing import Any
 
 import bcrypt
 import jwt
+import secrets
 
 from src.accounts.enums import UserGroupEnum
 from src.core.config import settings
@@ -112,3 +114,14 @@ def decode_token(token: str) -> dict[str, Any]:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM])
     except jwt.InvalidTokenError as exc:
         raise UnauthorizedError("Invalid or expired token") from exc
+
+
+def generate_token() -> str:
+    """Generate a cryptographically secure random URL-safe token.
+
+    Used for refresh tokens, account activation and password reset tokens.
+
+    Returns:
+        A random string of about 43 characters (256 bits of randomness).
+    """
+    return secrets.token_urlsafe(32)

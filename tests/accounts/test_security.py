@@ -13,6 +13,7 @@ from src.accounts.security import (
     hash_password,
     validate_password_strength,
     verify_password,
+    generate_token,
 )
 from src.core.config import settings
 from src.core.exceptions import UnauthorizedError
@@ -128,3 +129,14 @@ def test_decode_token_rejects_wrong_signature() -> None:
 def test_decode_token_rejects_garbage() -> None:
     with pytest.raises(UnauthorizedError):
         decode_token("not-a-jwt")
+
+
+def test_generate_token_returns_url_safe_string_that_fits_the_column() -> None:
+    token = generate_token()
+
+    assert len(token) <= 255
+    assert token.replace("-", "").replace("_", "").isalnum()
+
+
+def test_generate_token_is_unique() -> None:
+    assert len({generate_token() for _ in range(100)}) == 100
