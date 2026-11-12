@@ -76,18 +76,6 @@ async def test_register_user_turns_integrity_error_into_conflict(
         await register_user(db_session, "user@example.com", "Str0ng!Pass")
 
 
-@pytest.fixture
-def sent_emails(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
-    """Replace ``send_email`` used by the service and collect everything it was asked to send."""
-    sent: list[dict[str, Any]] = []
-
-    def fake_send_email(**kwargs: Any) -> None:
-        sent.append(kwargs)
-
-    monkeypatch.setattr("src.accounts.service.send_email", fake_send_email)
-    return sent
-
-
 def test_build_activation_link_contains_token() -> None:
     link = build_activation_link("abc123")
 

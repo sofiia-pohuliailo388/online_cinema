@@ -1,6 +1,7 @@
 """Fixtures for the accounts tests."""
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 import pytest
 from sqlalchemy import select
@@ -50,3 +51,15 @@ async def user_group(db_session: AsyncSession) -> UserGroup:
     db_session.add(group)
     await db_session.commit()
     return group
+
+
+@pytest.fixture
+def sent_emails(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Replace ``send_email`` used by the service and collect everything it was asked to send."""
+    sent: list[dict[str, Any]] = []
+
+    def fake_send_email(**kwargs: Any) -> None:
+        sent.append(kwargs)
+
+    monkeypatch.setattr("src.accounts.service.send_email", fake_send_email)
+    return sent

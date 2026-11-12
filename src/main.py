@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from src.core.exceptions import register_exception_handlers
 from src.movies.router import router as movies_router
+from src.accounts.router import router as accounts_router
 
 API_PREFIX = "/api/v1"
 
@@ -16,7 +17,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(movies_router, prefix=API_PREFIX)
-    # app.include_router(accounts_router, prefix=API_PREFIX)      # P2, P3
+    app.include_router(accounts_router, prefix=API_PREFIX)
     # app.include_router(interactions_router, prefix=API_PREFIX)  # P5
     # app.include_router(cart_router, prefix=API_PREFIX)          # P6
     # app.include_router(orders_router, prefix=API_PREFIX)        # P6
