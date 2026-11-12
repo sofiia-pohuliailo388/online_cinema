@@ -56,5 +56,11 @@ async def remove_favorite(
     await db.commit()
 
 
-async def list_favorites(...):
-    """Get the user's favorite movies."""
+async def list_favorites(
+    db: AsyncSession,
+    user_id: int,
+) -> list[Favorite]:
+    """Get all favorites belonging to a user."""
+    stmt = select(Favorite).where(Favorite.user_id == user_id).order_by(Favorite.id.desc())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
