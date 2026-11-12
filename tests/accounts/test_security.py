@@ -2,7 +2,12 @@
 
 import pytest
 
-from src.accounts.security import MAX_PASSWORD_BYTES, validate_password_strength
+from src.accounts.security import (
+    MAX_PASSWORD_BYTES,
+    hash_password,
+    validate_password_strength,
+    verify_password,
+)
 
 
 def test_validate_password_strength_accepts_strong_password() -> None:
@@ -38,3 +43,32 @@ def test_validate_password_strength_counts_bytes_not_characters() -> None:
 
     with pytest.raises(ValueError, match="at most 72 bytes"):
         validate_password_strength(password)
+
+
+def test_hash_password_returns_bcrypt_hash_not_plain_text() -> None:
+    hashed = hash_password("Str0ng!Pass")
+
+    assert hashed != "Str0ng!Pass"
+    assert hashed.startswith("$2b$")
+
+
+def test_hash_password_uses_random_salt() -> None:
+    assert hash_password("Str0ng!Pass") != hash_password("Str0ng!Pass")
+
+
+def test_verify_password_accepts_correct_password() -> None:
+    hashed = hash_password("Str0ng!Pass")
+
+    assert verify_password("Str0ng!Pass", hashed) is True
+
+
+def test_verify_password_rejects_wrong_password() -> None:
+    hashed = hash_password("Str0ng!Pass")
+
+    assert verify_password("Wr0ng!Pass", hashed) is False
+
+
+def test_verify_password_rejects_too_long_password() -> None:
+    hashed = hash_password("Str0ng!Pass")
+
+    assert verify_password("Aa1!" + "a" * MAX_PASSWORD_BYTES, hashed) is False
