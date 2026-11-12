@@ -5,7 +5,6 @@ import pytest
 
 from src.core.exceptions import (
     BadRequestError,
-    ConflictError,
     NotFoundError,
 )
 from src.interactions.models import Comment, CommentLike
@@ -160,7 +159,7 @@ async def test_like_own_comment(mock_notify, mock_db):
     mock_notify.assert_not_awaited()
 
 
-async def test_like_comment_twice(mock_db):
+async def test_like_comment_twice_removes_like(mock_db):
     db, result = mock_db
     comment = SimpleNamespace(
         id=5,
@@ -173,15 +172,16 @@ async def test_like_comment_twice(mock_db):
     )
     result.scalar_one_or_none.side_effect = [comment, existing_like]
 
-    with pytest.raises(ConflictError):
-        await like_comment(
-            db=db,
-            user_id=1,
-            comment_id=5,
-        )
+    response = await like_comment(
+        db=db,
+        user_id=1,
+        comment_id=5,
+    )
 
+    assert response is None
+    db.delete.assert_awaited_once_with(existing_like)
+    db.commit.assert_awaited_once()
     db.add.assert_not_called()
-    db.commit.assert_not_awaited()
 
 
 async def test_like_nonexistent_comment(mock_db):

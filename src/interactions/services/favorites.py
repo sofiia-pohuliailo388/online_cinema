@@ -54,3 +54,7 @@ async def remove_favorite(
 
     await db.delete(favorite)
     await db.commit()
+
+
+async def list_favorites(...):
+    """Get the user's favorite movies."""

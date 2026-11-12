@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import (
     BadRequestError,
-    ConflictError,
     NotFoundError,
 )
 from src.interactions.models import Comment, CommentLike
@@ -59,8 +58,8 @@ async def like_comment(
     db: AsyncSession,
     user_id: int,
     comment_id: int,
-) -> CommentLike:
-    """Like a comment and notify its author."""
+) -> CommentLike | None:
+    """Toggle a like on a comment and notify its author."""
 
     stmt = select(Comment).where(Comment.id == comment_id)
     result = await db.execute(stmt)
@@ -77,7 +76,9 @@ async def like_comment(
     existing_like = result.scalar_one_or_none()
 
     if existing_like is not None:
-        raise ConflictError("You have already liked this comment")
+        await db.delete(existing_like)
+        await db.commit()
+        return None
 
     comment_like = CommentLike(
         user_id=user_id,
