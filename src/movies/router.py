@@ -7,6 +7,7 @@ Layer rules (same for every domain):
     * The endpoint docstring becomes its description in Swagger - write it for API users.
     * Declare possible errors in ``responses=`` so they appear in Swagger.
 """
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status

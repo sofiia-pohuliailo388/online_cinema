@@ -6,6 +6,7 @@ Layer rules (same for every domain):
     * Errors are raised as ``src.core.exceptions`` (NotFoundError, ConflictError, ...).
     * Return ORM objects; converting to schemas is the router's job.
 """
+
 from typing import Any
 
 from sqlalchemy import select

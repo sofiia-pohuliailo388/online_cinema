@@ -9,6 +9,7 @@
           login_as(UserGroupEnum.MODERATOR)
           response = await client.post(...)
 """
+
 from collections.abc import AsyncGenerator, Callable
 from types import SimpleNamespace
 from typing import Any

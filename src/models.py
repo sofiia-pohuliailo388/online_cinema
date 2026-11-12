@@ -3,6 +3,7 @@
 When you create ``src/<domain>/models.py`` - add one import line here,
 otherwise Alembic will not see your tables.
 """
+
 import src.movies.models  # noqa: F401
 
 # import src.accounts.models  # noqa: F401       (P2)
