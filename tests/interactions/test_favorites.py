@@ -5,14 +5,16 @@ import pytest
 from sqlalchemy import select
 
 from src.accounts.models import User, UserGroup
-from src.movies.models import Movie, Certification
 from src.core.exceptions import ConflictError, NotFoundError
+from src.core.pagination import PaginationParams
 from src.interactions.models import Favorite
 from src.interactions.services.favorites import (
     add_favorite,
-    remove_favorite,
     list_favorites,
+    remove_favorite,
 )
+from src.movies.filters import MovieFilterParams
+from src.movies.models import Certification, Movie
 
 
 async def create_test_movie(db_session, name: str):
@@ -58,6 +60,19 @@ async def create_test_user(db_session, email: str):
     await db_session.flush()
 
     return user
+
+
+def create_movie_filters(search=None):
+    """Create movie filters for tests."""
+    return MovieFilterParams(
+        search=search,
+        genre_id=None,
+        year_from=None,
+        year_to=None,
+        min_imdb=None,
+        sort_by="name",
+        sort_order="asc",
+    )
 
 
 @pytest.fixture
@@ -147,27 +162,38 @@ async def test_list_favorites_returns_user_favorites(db_session):
     movie1 = await create_test_movie(db_session, "Movie 1")
     movie2 = await create_test_movie(db_session, "Movie 2")
 
-    favorite1 = Favorite(user_id=user.id, movie_id=movie1.id)
-    favorite2 = Favorite(user_id=user.id, movie_id=movie2.id)
-    db_session.add_all([favorite1, favorite2])
+    db_session.add_all(
+        [
+            Favorite(user_id=user.id, movie_id=movie1.id),
+            Favorite(user_id=user.id, movie_id=movie2.id),
+        ]
+    )
     await db_session.commit()
 
-    result = await list_favorites(db_session, user.id)
+    result, total = await list_favorites(
+        db_session,
+        user.id,
+        create_movie_filters(),
+        PaginationParams(page=1, per_page=20),
+    )
 
-    assert len(result) == 2
-    assert {favorite.movie_id for favorite in result} == {
-        movie1.id,
-        movie2.id,
-    }
+    assert total == 2
+    assert {movie.id for movie in result} == {movie1.id, movie2.id}
 
 
 @pytest.mark.asyncio
 async def test_list_favorites_returns_empty_list(db_session):
     user = await create_test_user(db_session, "empty@example.com")
 
-    result = await list_favorites(db_session, user.id)
+    result, total = await list_favorites(
+        db_session,
+        user.id,
+        create_movie_filters(),
+        PaginationParams(page=1, per_page=20),
+    )
 
     assert result == []
+    assert total == 0
 
 
 @pytest.mark.asyncio
@@ -186,8 +212,61 @@ async def test_list_favorites_returns_only_current_user_favorites(db_session):
     )
     await db_session.commit()
 
-    result = await list_favorites(db_session, user1.id)
+    result, total = await list_favorites(
+        db_session,
+        user1.id,
+        create_movie_filters(),
+        PaginationParams(page=1, per_page=20),
+    )
 
+    assert total == 1
     assert len(result) == 1
-    assert result[0].movie_id == movie1.id
-    assert all(favorite.user_id == user1.id for favorite in result)
+    assert result[0].id == movie1.id
+
+
+@pytest.mark.asyncio
+async def test_list_favorites_applies_search_filter(db_session):
+    user = await create_test_user(db_session, "search@example.com")
+
+    movie1 = await create_test_movie(db_session, "Batman")
+    movie2 = await create_test_movie(db_session, "Superman")
+
+    db_session.add_all(
+        [
+            Favorite(user_id=user.id, movie_id=movie1.id),
+            Favorite(user_id=user.id, movie_id=movie2.id),
+        ]
+    )
+    await db_session.commit()
+
+    result, total = await list_favorites(
+        db_session,
+        user.id,
+        create_movie_filters(search="Batman"),
+        PaginationParams(page=1, per_page=20),
+    )
+
+    assert total == 1
+    assert len(result) == 1
+    assert result[0].name == "Batman"
+
+
+@pytest.mark.asyncio
+async def test_list_favorites_applies_pagination(db_session):
+    user = await create_test_user(db_session, "pagination@example.com")
+
+    movies = [await create_test_movie(db_session, f"Movie {i}") for i in range(3)]
+
+    db_session.add_all([Favorite(user_id=user.id, movie_id=movie.id) for movie in movies])
+    await db_session.commit()
+
+    result, total = await list_favorites(
+        db_session,
+        user.id,
+        create_movie_filters(),
+        PaginationParams(page=1, per_page=2),
+    )
+
+    assert total == 3
+    assert len(result) == 2
+    assert [movie.name for movie in result] == ["Movie 0", "Movie 1"]

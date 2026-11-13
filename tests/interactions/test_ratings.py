@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.interactions.models import Rating
-from src.interactions.services.ratings import create_rating
+from src.interactions.services.ratings import (
+    create_rating,
+    get_average_rating,
+)
 
 
 @pytest.fixture
@@ -53,3 +56,23 @@ async def test_update_rating(mock_db):
     db.add.assert_not_called()
     db.commit.assert_awaited_once()
     db.refresh.assert_awaited_once_with(rating)
+
+
+async def test_get_average_rating(mock_db):
+    db, result = mock_db
+    result.scalar_one.return_value = 8.5
+
+    average = await get_average_rating(db=db, movie_id=10)
+
+    assert average == 8.5
+    db.execute.assert_awaited_once()
+
+
+async def test_get_average_rating_without_ratings(mock_db):
+    db, result = mock_db
+    result.scalar_one.return_value = None
+
+    average = await get_average_rating(db=db, movie_id=10)
+
+    assert average is None
+    db.execute.assert_awaited_once()
