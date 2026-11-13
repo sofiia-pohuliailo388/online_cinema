@@ -1,39 +1,38 @@
-from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import List, TYPE_CHECKING
+from typing import List
 
-from sqlalchemy import ForeignKey, DateTime, func, String, DECIMAL
+from sqlalchemy import ForeignKey, String, DECIMAL
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from core.models import Base
-
-
-if TYPE_CHECKING:
-    from src.accounts.models import User
-    from src.movies.models import Movie
+from src.core.models import Base, TimestampMixin
 
 
 class StatusEnum(StrEnum):
+    """Available order statuses."""
+
     PENDING = "pending"
     PAID = "paid"
     CANCELED = "canceled"
 
 
-class Order(Base):
+class Order(Base, TimestampMixin):
+    """User order containing purchased movie items."""
+
     __tablename__ = "orders"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     status: Mapped[StatusEnum] = mapped_column(String, default=StatusEnum.PENDING)
     total_amount: Mapped[Decimal | None] = mapped_column(DECIMAL(10, 2), nullable=True)
 
-    order_items: Mapped[List["OrderItem"]] = relationship(back_populates="order")
-    user: Mapped["User"] = relationship()
+    order_items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="order")
+    user: Mapped["User"] = relationship("User")
 
 
 class OrderItem(Base):
+    """Movie included in an order with its price at order creation."""
+
     __tablename__ = "order_items"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -41,5 +40,5 @@ class OrderItem(Base):
     movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id"))
     price_at_order: Mapped[Decimal] = mapped_column(DECIMAL(10, 2))
 
-    order: Mapped["Order"] = relationship(back_populates="order_items")
-    movie: Mapped["Movie"] = relationship()
+    order: Mapped["Order"] = relationship("Order", back_populates="order_items")
+    movie: Mapped["Movie"] = relationship("Movie")
