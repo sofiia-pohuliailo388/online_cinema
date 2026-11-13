@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     SECRET_KEY: str = "dev-secret-key"
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/cinema"
+    DATABASE_URL: str
     REDIS_URL: str = "redis://localhost:6379/0"
 
     ACCESS_TOKEN_TTL_MINUTES: int = 15
