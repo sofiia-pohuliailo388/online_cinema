@@ -1,15 +1,7 @@
 from typing import Any, Optional
 from fastapi import Query
-from sqlalchemy import Select
-from src.movies.models import Genre, Movie
-
-"""Catalog filtering / sorting / search - CONTRACT used by P5 for favorites (owner: P4).
-
-Usage::
-
-    stmt = select(Movie).join(Favorite).where(Favorite.user_id == user.id)
-    stmt = apply_movie_filters(stmt, filters)
-"""
+from sqlalchemy import Select, or_
+from src.movies.models import Genre, Movie, Star, Director
 
 
 class MovieFilterParams:
@@ -19,7 +11,7 @@ class MovieFilterParams:
 
     def __init__(
         self,
-        search: Optional[str] = Query(None, description="Search movies by title"),
+        search: Optional[str] = Query(None, description="Search movies by title, description, star, or director"),
         genre_id: Optional[int] = Query(None, description="Filter movies by genre ID"),
         year_from: Optional[int] = Query(
             None, description="Filter movies released from this year onward"
@@ -45,12 +37,26 @@ class MovieFilterParams:
 
 
 def apply_movie_filters(stmt: Select[Any], filters: MovieFilterParams) -> Select[Any]:
-    """Apply filters (year, imdb, genre), sorting (price, year, votes) and search.
+    """Apply filters (year, imdb, genre), sorting (price, year, votes) and search
+    (with ilike on name, description, and joins on stars/directors).
 
     Implements the official team contract used across domains (e.g., favorites).
     """
     if filters.search:
-        stmt = stmt.where(Movie.name.ilike(f"%{filters.search}%"))
+        search_query = f"%{filters.search}%"
+        stmt = (
+            stmt.outerjoin(Movie.stars)
+            .outerjoin(Movie.directors)
+            .where(
+                or_(
+                    Movie.name.ilike(search_query),
+                    Movie.description.ilike(search_query),
+                    Star.name.ilike(search_query),
+                    Director.name.ilike(search_query),
+                )
+            )
+            .distinct(Movie.id)
+        )
 
     if filters.genre_id is not None:
         stmt = stmt.where(Movie.genres.any(Genre.id == filters.genre_id))
