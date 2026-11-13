@@ -5,7 +5,12 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from src.accounts.schemas import UserRead, UserRegisterRequest
+from src.accounts.schemas import (
+    TokenPairResponse,
+    UserLoginRequest,
+    UserRead,
+    UserRegisterRequest,
+)
 
 
 def test_register_request_accepts_valid_data() -> None:
@@ -42,9 +47,41 @@ def test_register_request_rejects_invalid_email() -> None:
 
 def test_user_read_is_built_from_orm_object_without_password_hash() -> None:
     db_user = SimpleNamespace(
-        id=1, email="user@example.com", is_active=False, hashed_password="secret-hash"
+        id=1,
+        email="user@example.com",
+        is_active=False,
+        hashed_password="secret-hash",
     )
 
     data = UserRead.model_validate(db_user).model_dump()
 
     assert data == {"id": 1, "email": "user@example.com", "is_active": False}
+
+
+def test_login_request_lowercases_email() -> None:
+    request = UserLoginRequest(email="User@Example.COM", password="whatever")
+
+    assert request.email == "user@example.com"
+
+
+def test_login_request_does_not_check_password_strength() -> None:
+    # A user may have created the password under older rules: login must not reject it.
+    request = UserLoginRequest(email="user@example.com", password="weak")
+
+    assert request.password == "weak"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"email": "user@example.com"}, {"email": "not-an-email", "password": "x"}],
+    ids=["missing_password", "invalid_email"],
+)
+def test_login_request_rejects_invalid_body(body: dict[str, str]) -> None:
+    with pytest.raises(ValidationError):
+        UserLoginRequest(**body)
+
+
+def test_token_pair_response_defaults_to_bearer() -> None:
+    response = TokenPairResponse(access_token="a", refresh_token="r")
+
+    assert response.token_type == "bearer"
