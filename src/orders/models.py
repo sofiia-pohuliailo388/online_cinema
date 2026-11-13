@@ -27,7 +27,7 @@ class Order(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     status: Mapped[StatusEnum] = mapped_column(String, default=StatusEnum.PENDING)
-    total_amount: Mapped[Decimal | None] = mapped_column(DECIMAL(10,2), nullable=True)
+    total_amount: Mapped[Decimal | None] = mapped_column(DECIMAL(10, 2), nullable=True)
 
     order_items: Mapped[List["OrderItem"]] = relationship(back_populates="order")
     user: Mapped["User"] = relationship()
@@ -39,7 +39,7 @@ class OrderItem(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
     movie_id: Mapped[int] = mapped_column(ForeignKey("movies.id"))
-    price_at_order: Mapped[Decimal] = mapped_column(DECIMAL(10,2))
+    price_at_order: Mapped[Decimal] = mapped_column(DECIMAL(10, 2))
 
     order: Mapped["Order"] = relationship(back_populates="order_items")
     movie: Mapped["Movie"] = relationship()
