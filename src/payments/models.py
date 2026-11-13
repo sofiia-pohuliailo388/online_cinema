@@ -2,19 +2,18 @@
 
 Payment and PaymentItem entities.
 """
-
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, func
+from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.models import Base
-
 if TYPE_CHECKING:
     from orders.models import Order, OrderItem
+
 
 
 class PaymentStatus(str, Enum):
@@ -37,8 +36,11 @@ class Payment(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    status: Mapped[PaymentStatus] = mapped_column(String, default=PaymentStatus.successful)
-
+    status: Mapped[PaymentStatus] = mapped_column(
+        SQLEnum(PaymentStatus),
+        nullable=False,
+        default=PaymentStatus.successful,
+    )
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     external_payment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
