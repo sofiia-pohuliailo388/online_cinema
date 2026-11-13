@@ -1,4 +1,5 @@
 """Alembic environment (async). Models are discovered through ``src/models.py``."""
+
 import asyncio
 from logging.config import fileConfig
 

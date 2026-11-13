@@ -3,6 +3,7 @@
 Pattern: arrange (login / create data) -> act (one request) -> assert (status + body).
 One test = one behaviour; the test name says what is expected.
 """
+
 from collections.abc import Callable
 from typing import Any
 
@@ -34,9 +35,7 @@ async def test_list_genres_paginated(client: AsyncClient, login_as: Callable[...
     assert body["pages"] == 2
 
 
-async def test_create_genre_as_moderator(
-    client: AsyncClient, login_as: Callable[..., Any]
-) -> None:
+async def test_create_genre_as_moderator(client: AsyncClient, login_as: Callable[..., Any]) -> None:
     login_as(UserGroupEnum.MODERATOR)
 
     response = await client.post(URL, json={"name": "Action"})
