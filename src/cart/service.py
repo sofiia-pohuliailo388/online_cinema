@@ -3,11 +3,11 @@ from sqlalchemy import select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from cart.models import Cart, CartItem
-from core.exceptions import NotFoundError, ConflictError
-from movies.models import Movie
-from movies.service import get_movie
-from orders.service import is_movie_purchased
+from src.cart.models import Cart, CartItem
+from src.core.exceptions import NotFoundError, ConflictError
+from src.movies.models import Movie
+from src.movies.service import get_movie
+from src.orders.service import is_movie_purchased
 
 
 async def is_movie_in_carts(db: AsyncSession, movie_id: int) -> bool:
