@@ -23,17 +23,17 @@ services:
       db: { condition: service_healthy }
       redis: { condition: service_started }
 
-  # Uncomment when P3 creates src/tasks/celery_app.py
-  # celery-worker:
-  #   build: .
-  #   env_file: .env
-  #   command: celery -A src.tasks.celery_app worker -l info
-  #   depends_on: [redis, db]
-  # celery-beat:
-  #   build: .
-  #   env_file: .env
-  #   command: celery -A src.tasks.celery_app beat -l info
-  #   depends_on: [redis]
+  celery-worker:
+    build: .
+    env_file: .env
+    command: celery -A src.tasks.celery_app worker -l info
+    depends_on: [redis, db]
+
+  celery-beat:
+    build: .
+    env_file: .env
+    command: celery -A src.tasks.celery_app beat -l info
+    depends_on: [redis]
 
   minio:
     image: minio/minio
