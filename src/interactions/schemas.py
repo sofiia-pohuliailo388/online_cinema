@@ -79,3 +79,11 @@ class FavoriteRead(BaseModel):
     id: int
     user_id: int
     movie_id: int
+
+
+class MovieInteractionStats(BaseModel):
+    """Statistics of user interactions with a movie."""
+
+    movie_id: int
+    average_rating: float | None
+    likes_count: int

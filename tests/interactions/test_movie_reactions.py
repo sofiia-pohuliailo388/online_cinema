@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.interactions.models import MovieReaction
-from src.interactions.services.reactions import toggle_movie_reaction
+from src.interactions.services.reactions import (
+    get_movie_likes_count,
+    toggle_movie_reaction,
+)
 
 
 @pytest.fixture
@@ -90,3 +93,13 @@ async def test_change_dislike_to_like(mock_db):
     assert reaction.is_like is True
     db.commit.assert_awaited_once()
     db.refresh.assert_awaited_once_with(reaction)
+
+
+async def test_get_movie_likes_count(mock_db):
+    db, result = mock_db
+    result.scalar_one.return_value = 2
+
+    likes_count = await get_movie_likes_count(db=db, movie_id=10)
+
+    assert likes_count == 2
+    db.execute.assert_awaited_once()

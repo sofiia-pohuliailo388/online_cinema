@@ -1,11 +1,11 @@
 """HTTP endpoints of the movies domain.
 
 Layer rules (same for every domain):
-    * A router only: reads input, checks access via dependencies, calls ONE service
-      function, converts the result to a ``*Read`` schema.
-    * No SQL, no ``commit()``, no ``HTTPException`` here.
-    * The endpoint docstring becomes its description in Swagger - write it for API users.
-    * Declare possible errors in ``responses=`` so they appear in Swagger.
+- A router only: reads input, checks access via dependencies, calls ONE service
+  function, converts the result to a ``*Read`` schema.
+- No SQL, no ``commit()``, no ``HTTPException`` here.
+- The endpoint docstring becomes its description in Swagger - write it for API users.
+- Declare possible errors in ``responses=`` so they appear in Swagger.
 """
 
 from typing import Annotated
@@ -17,7 +17,13 @@ from src.core.database import DbSession
 from src.core.exceptions import ErrorResponse
 from src.core.pagination import Page, PaginationParams
 from src.movies import service
-from src.movies.schemas import GenreCreate, GenreRead, GenreUpdate
+from src.movies.filters import MovieFilterParams
+from src.movies.schemas import (
+    GenreCreate,
+    GenreRead,
+    GenreUpdate,
+    MovieRead,
+)
 
 router = APIRouter(tags=["movies"])
 
@@ -28,6 +34,8 @@ MODERATOR_ONLY = {
     403: {"model": ErrorResponse, "description": "Moderator or admin only"},
 }
 
+
+# --- GENRES ENDPOINTS ---
 
 @router.get("/genres")
 async def list_genres(
@@ -73,3 +81,25 @@ async def update_genre(
 async def delete_genre(genre_id: int, db: DbSession, _: ModeratorUser) -> None:
     """Delete a genre. Moderator or admin only."""
     await service.delete_genre(db, genre_id)
+
+
+# --- MOVIES ENDPOINTS ---
+
+@router.get("/movies")
+async def list_movies(
+    db: DbSession,
+    filter_params: Annotated[MovieFilterParams, Depends()],
+    pagination: Annotated[PaginationParams, Depends()],
+) -> Page[MovieRead]:
+    """Retrieve a paginated and filtered list of movies."""
+    items, total = await service.list_movies(db, filter_params, pagination)
+    return Page[MovieRead].create(
+        [MovieRead.model_validate(item) for item in items], total, pagination
+    )
+
+
+@router.get("/movies/{movie_id}", responses=NOT_FOUND)
+async def get_movie(movie_id: int, db: DbSession) -> MovieRead:
+    """Retrieve a single movie by its ID with all relations loaded."""
+    movie = await service.get_movie(db, movie_id)
+    return MovieRead.model_validate(movie)
