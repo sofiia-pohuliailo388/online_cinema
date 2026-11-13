@@ -3,8 +3,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from cart.models import CartItem
-from movies.schemas import GenreRead
+from src.cart.models import CartItem
+from src.movies.schemas import GenreRead
 
 
 class CartItemCreateSchema(BaseModel):
