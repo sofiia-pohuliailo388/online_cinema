@@ -1,5 +1,5 @@
 """Business logic of the cart domain (owner: P6)."""
-from sqlalchemy import select
+from sqlalchemy import select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,9 +14,8 @@ async def is_movie_in_carts(db: AsyncSession, movie_id: int) -> bool:
     """CONTRACT for P4: is the movie in at least one user's cart?
 
     Used to warn a moderator before deleting a movie.
-    TODO(P6): real query. Stub returns False.
     """
-    return False
+    return bool(await db.scalar(select(exists().where(CartItem.movie_id == movie_id))))
 
 
 async def get_cart_by_user_id(db: AsyncSession, user_id: int) -> Cart | None:
@@ -31,6 +30,7 @@ async def add_movie_in_cart(db: AsyncSession, movie_id: int, user_id: int) -> Ca
         raise ConflictError(f"Movie {movie_id} is already purchased")
 
     cart = await get_cart_by_user_id(db, user_id)
+
     if cart is not None:
         if await db.scalar(
                 select(CartItem).where(
@@ -60,17 +60,38 @@ async def get_cart_with_items(db: AsyncSession, user_id: int) -> Cart:
         ).where(Cart.user_id == user_id)
     )
     if cart is None:
-        raise NotFoundError(f"Cart is not found")
+        raise NotFoundError("Cart is not found")
 
     return cart
 
 
-async def remove_movie_from_cart(db: AsyncSession, user_id: int, movie_id: int):
-    cart = db.scalar(select(Cart).where(Cart.user_id == user_id))
+async def remove_movie_from_cart(db: AsyncSession, user_id: int, movie_id: int) -> None:
+    cart = await db.scalar(select(Cart).where(Cart.user_id == user_id))
     if cart is None:
         raise NotFoundError("Cart is not found")
 
-    cart_item = db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, m))
+    cart_item = await db.scalar(
+        select(CartItem).where(
+            CartItem.cart_id == cart.id,
+            CartItem.movie_id == movie_id
+        )
+    )
+
+    if cart_item is None:
+        raise NotFoundError("Cart item is not found")
+
+    await db.delete(cart_item)
+    await db.commit()
 
 
+async def clear_cart(db: AsyncSession, user_id: int) -> None:
+    cart = await db.scalar(select(Cart).where(Cart.user_id == user_id))
+    if cart is None:
+        raise NotFoundError("Cart is not found")
 
+    cart_items = await db.scalars(select(CartItem).where(CartItem.cart_id == cart.id))
+
+    for cart_item in cart_items:
+        await db.delete(cart_item)
+
+    await db.commit()
