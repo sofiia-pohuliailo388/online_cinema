@@ -8,10 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.accounts.enums import UserGroupEnum
-from src.accounts.models import User, UserGroup, ActivationToken
-from src.accounts.security import hash_password, generate_token
+from src.accounts.models import User, UserGroup, ActivationToken, RefreshToken
+from src.accounts.schemas import TokenPairResponse
+from src.accounts.security import (
+    hash_password,
+    generate_token,
+    verify_password,
+    create_access_token,
+)
 from src.core.config import settings
-from src.core.exceptions import ConflictError, BadRequestError
+from src.core.exceptions import (
+    ConflictError,
+    BadRequestError,
+    UnauthorizedError,
+    PermissionDeniedError,
+)
 from src.notifications.service import send_email
 
 
@@ -141,3 +152,45 @@ async def activate_user(db: AsyncSession, token: str) -> User:
     await db.commit()
 
     return user
+
+
+async def login_user(db: AsyncSession, email: str, password: str) -> TokenPairResponse:
+    """Check the credentials and issue a pair of tokens.
+
+    The access token is a JWT. The refresh token is a random string stored in the DB,
+    so it can be revoked on logout. A user may have several refresh tokens (one per device).
+
+    Args:
+        db: Database session.
+        email: Email of the user (already normalized to lower case).
+        password: Plain-text password.
+
+    Returns:
+        The access and refresh tokens.
+
+    Raises:
+        UnauthorizedError: If the email is unknown or the password is wrong
+            (the same message for both, so that registered emails are not revealed).
+        PermissionDeniedError: If the credentials are right, but the account is not activated.
+    """
+    user = await db.scalar(
+        select(User).options(selectinload(User.group)).where(User.email == email)
+    )
+    if user is None or not verify_password(password, user.hashed_password):
+        raise UnauthorizedError("Invalid email or password")
+
+    if not user.is_active:
+        raise PermissionDeniedError("Account is not activated")
+
+    access_token = create_access_token(user.id, user.group.name)
+    refresh_token = generate_token()
+    db.add(
+        RefreshToken(
+            user_id=user.id,
+            token=refresh_token,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_TTL_DAYS),
+        )
+    )
+    await db.commit()
+
+    return TokenPairResponse(access_token=access_token, refresh_token=refresh_token)

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.accounts.enums import UserGroupEnum
 from src.accounts.models import User, UserGroup
+from src.accounts.security import hash_password
 
 CreateUser = Callable[..., Awaitable[User]]
 
@@ -22,6 +23,7 @@ def create_user(db_session: AsyncSession) -> CreateUser:
         *,
         email: str = "user@test.com",
         is_active: bool = True,
+        password: str | None = None,
     ) -> User:
         result = await db_session.execute(select(UserGroup).where(UserGroup.name == group))
         user_group = result.scalar_one_or_none()
@@ -31,7 +33,7 @@ def create_user(db_session: AsyncSession) -> CreateUser:
             await db_session.flush()
         user = User(
             email=email,
-            hashed_password="not-a-real-hash",
+            hashed_password=hash_password(password) if password else "not-a-real-hash",
             is_active=is_active,
             group_id=user_group.id,
         )
