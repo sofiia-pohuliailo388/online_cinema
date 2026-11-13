@@ -1,11 +1,16 @@
 from decimal import Decimal
 from enum import StrEnum
-from typing import List
+from typing import List, TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, String, DECIMAL
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.models import Base, TimestampMixin
+
+
+if TYPE_CHECKING:
+    from src.accounts.models import User
+    from src.movies.models import Movie
 
 
 class StatusEnum(StrEnum):
