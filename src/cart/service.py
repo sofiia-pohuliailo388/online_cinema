@@ -1,4 +1,5 @@
 """Business logic of the cart domain (owner: P6)."""
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 

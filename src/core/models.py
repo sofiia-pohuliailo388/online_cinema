@@ -6,6 +6,7 @@ Team rules for models:
       class names as strings (``relationship("Movie")``) - no imports between domains.
     * Register each new ``models.py`` in ``src/models.py`` so Alembic and tests see it.
 """
+
 from datetime import datetime
 
 from sqlalchemy import DateTime, MetaData, func
@@ -28,9 +29,7 @@ class Base(DeclarativeBase):
 class TimestampMixin:
     """Adds ``created_at`` / ``updated_at`` columns managed by the database."""
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

@@ -1,4 +1,5 @@
 """Notification contract (owner: P3). Stubs only log until implemented."""
+
 import logging
 from typing import Any
 
