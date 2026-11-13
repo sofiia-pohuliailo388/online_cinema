@@ -5,6 +5,7 @@ from typing import List, TYPE_CHECKING
 from sqlalchemy import ForeignKey, String, DECIMAL
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from payments.models import Payment
 from src.core.models import Base, TimestampMixin
 
 
@@ -33,6 +34,9 @@ class Order(Base, TimestampMixin):
 
     order_items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="order")
     user: Mapped["User"] = relationship("User")
+    payments: Mapped[list["Payment"]] = relationship(
+        "Payment", back_populates="order", cascade="all, delete-orphan"
+        )
 
 
 class OrderItem(Base):
