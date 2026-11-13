@@ -1,6 +1,6 @@
 """Business logic for movie likes and dislikes."""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.interactions.models import MovieReaction
@@ -40,3 +40,14 @@ async def toggle_movie_reaction(
         await db.refresh(reaction)
 
     return reaction
+
+
+async def get_movie_likes_count(db: AsyncSession, movie_id: int) -> int:
+    """Count positive reactions for a movie."""
+    stmt = select(func.count(MovieReaction.id)).where(
+        MovieReaction.movie_id == movie_id,
+        MovieReaction.is_like.is_(True),
+    )
+    result = await db.execute(stmt)
+
+    return result.scalar_one()
