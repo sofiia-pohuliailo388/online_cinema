@@ -53,9 +53,23 @@ class UserRead(BaseModel):
     is_active: bool = Field(description="``False`` until the account is activated by email.")
 
 
-class TokenPairResponse(BaseModel):
-    """Pair of JWT tokens issued on login."""
+class RefreshTokenRequest(BaseModel):
+    """Body of the ``/refresh`` and ``/logout`` requests."""
+
+    refresh_token: str = Field(
+        description="Refresh token received on login.",
+        examples=["kJ3xQ9vR2mT7wYpL0aZ8nC5dF1gH6sBu4eIoXjKq-Vw"],
+    )
+
+
+class AccessTokenResponse(BaseModel):
+    """Response of ``/refresh``: a new short-lived access token."""
 
     access_token: str = Field(description="Short-lived JWT for the ``Authorization`` header.")
-    refresh_token: str = Field(description="Long-lived token used to get a new access token.")
     token_type: str = Field(default="bearer", description="Token type.", examples=["bearer"])
+
+
+class TokenPairResponse(AccessTokenResponse):
+    """Pair of tokens issued on login."""
+
+    refresh_token: str = Field(description="Long-lived token used to get a new access token.")

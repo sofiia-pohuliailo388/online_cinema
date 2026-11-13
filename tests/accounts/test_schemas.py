@@ -10,6 +10,8 @@ from src.accounts.schemas import (
     UserLoginRequest,
     UserRead,
     UserRegisterRequest,
+    AccessTokenResponse,
+    RefreshTokenRequest,
 )
 
 
@@ -85,3 +87,18 @@ def test_token_pair_response_defaults_to_bearer() -> None:
     response = TokenPairResponse(access_token="a", refresh_token="r")
 
     assert response.token_type == "bearer"
+
+
+def test_refresh_token_request_requires_token() -> None:
+    with pytest.raises(ValidationError):
+        RefreshTokenRequest()
+
+
+def test_access_token_response_defaults_to_bearer() -> None:
+    assert AccessTokenResponse(access_token="a").token_type == "bearer"
+
+
+def test_token_pair_response_has_all_three_fields() -> None:
+    data = TokenPairResponse(access_token="a", refresh_token="r").model_dump()
+
+    assert data == {"access_token": "a", "refresh_token": "r", "token_type": "bearer"}
