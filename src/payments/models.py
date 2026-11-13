@@ -11,9 +11,9 @@ from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, Numeric, String, f
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.models import Base
+
 if TYPE_CHECKING:
     from orders.models import Order, OrderItem
-
 
 
 class PaymentStatus(str, Enum):
