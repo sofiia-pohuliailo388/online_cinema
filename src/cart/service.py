@@ -64,3 +64,13 @@ async def get_cart_with_items(db: AsyncSession, user_id: int) -> Cart:
 
     return cart
 
+
+async def remove_movie_from_cart(db: AsyncSession, user_id: int, movie_id: int):
+    cart = db.scalar(select(Cart).where(Cart.user_id == user_id))
+    if cart is None:
+        raise NotFoundError("Cart is not found")
+
+    cart_item = db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, m))
+
+
+
