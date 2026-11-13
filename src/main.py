@@ -18,7 +18,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(movies_router, prefix=API_PREFIX)
-    app.include_router(accounts_router, prefix=API_PREFIX)    
+    app.include_router(accounts_router, prefix=API_PREFIX)
     app.include_router(interactions_router, prefix=API_PREFIX)
     # app.include_router(cart_router, prefix=API_PREFIX)          # P6
     # app.include_router(orders_router, prefix=API_PREFIX)        # P6
