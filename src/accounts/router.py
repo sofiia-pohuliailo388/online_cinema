@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 
 from src.accounts import service
-from src.accounts.schemas import UserRead, UserRegisterRequest
+from src.accounts.schemas import UserRead, UserRegisterRequest, TokenPairResponse, UserLoginRequest
 from src.core.database import DbSession
 from src.core.exceptions import ErrorResponse
 
@@ -52,3 +52,27 @@ async def activate(
     """
     user = await service.activate_user(db, token)
     return UserRead.model_validate(user)
+
+
+@router.post(
+    "/login",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": "Invalid email or password",
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "model": ErrorResponse,
+            "description": "Account is not activated",
+        },
+    },
+)
+async def login(data: UserLoginRequest, db: DbSession) -> TokenPairResponse:
+    """Log in with email and password and get a pair of tokens.
+
+    Pass the ``access_token`` in the ``Authorization: Bearer <access_token>`` header of the
+    requests that need authentication. It is short-lived. The ``refresh_token`` is stored on
+    the server (a user can have several, one per device) and is used to get a new access token.
+    The email is case-insensitive. A wrong email and a wrong password give the same error.
+    """
+    return await service.login_user(db, data.email, data.password)
