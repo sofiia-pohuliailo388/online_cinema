@@ -11,7 +11,9 @@ class MovieFilterParams:
 
     def __init__(
         self,
-        search: Optional[str] = Query(None, description="Search movies by title, description, star, or director"),
+        search: Optional[str] = Query(
+            None, description="Search movies by title, description, star, or director"
+        ),
         genre_id: Optional[int] = Query(None, description="Filter movies by genre ID"),
         year_from: Optional[int] = Query(
             None, description="Filter movies released from this year onward"
