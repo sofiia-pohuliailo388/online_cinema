@@ -111,7 +111,7 @@ class Movie(Base, TimestampMixin):
     imdb: Mapped[float] = mapped_column(Float, nullable=False)
     votes: Mapped[int] = mapped_column(Integer, nullable=False)
     meta_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    gross: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gross: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     certification_id: Mapped[int] = mapped_column(ForeignKey("certifications.id"), nullable=False)
