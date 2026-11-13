@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 jinja_env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
 
+
 def send_email(to: str, subject: str, template: str, context: dict[str, Any]) -> None:
     """CONTRACT: queue an email rendered from ``templates/<template>``.
 

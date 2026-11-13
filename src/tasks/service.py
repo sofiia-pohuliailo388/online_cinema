@@ -23,10 +23,21 @@ def cleanup_expired_tokens() -> None:
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     db = SessionLocal()
     try:
-        deleted_activation = db.query(ActivationToken).filter(ActivationToken.expires_at < now).delete()
-        deleted_reset = db.query(PasswordResetToken).filter(PasswordResetToken.expires_at < now).delete()
+        deleted_activation = db.query(
+            ActivationToken
+        ).filter(
+            ActivationToken.expires_at < now
+        ).delete()
+        deleted_reset = db.query(
+            PasswordResetToken
+        ).filter(
+            PasswordResetToken.expires_at < now
+        ).delete()
         db.commit()
-        logger.info("Cleaned up expired tokens: %s activation, %s reset", deleted_activation, deleted_reset)
+        logger.info(
+            "Cleaned up expired tokens: %s activation, %s reset",
+            deleted_activation, deleted_reset
+        )
     except Exception as exc:
         db.rollback()
         logger.error("Error during expired tokens cleanup: %s", exc)
