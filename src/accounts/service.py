@@ -1,26 +1,35 @@
-"""Business logic of the accounts domain (spec, section 1)."""
+"""Business logic of the accounts domain (spec, section 1): registration, tokens, passwords.
+
+Owner: P2.
+"""
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.accounts.enums import UserGroupEnum
-from src.accounts.models import User, UserGroup, ActivationToken, RefreshToken, PasswordResetToken
+from src.accounts.models import (
+    ActivationToken,
+    PasswordResetToken,
+    RefreshToken,
+    User,
+    UserGroup,
+)
 from src.accounts.security import (
-    hash_password,
-    generate_token,
-    verify_password,
     create_access_token,
+    generate_token,
+    hash_password,
+    verify_password,
 )
 from src.core.config import settings
 from src.core.exceptions import (
-    ConflictError,
     BadRequestError,
-    UnauthorizedError,
+    ConflictError,
     PermissionDeniedError,
+    UnauthorizedError,
 )
 from src.notifications.service import send_email
 
@@ -174,9 +183,8 @@ async def register_user(db: AsyncSession, email: str, password: str) -> User:
         await db.rollback()
         raise ConflictError("User with this email already exists") from exc
 
-    _send_activation_email(user.email, activation_token.token)
-
     await db.refresh(user)
+    _send_activation_email(user.email, activation_token.token)
 
     return user
 

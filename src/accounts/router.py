@@ -1,4 +1,7 @@
-"""HTTP endpoints of the accounts domain: registration, login, tokens and passwords."""
+"""HTTP endpoints of the accounts domain: registration, login, tokens and passwords.
+
+Owner: P2. The router is shared with P3 (profile and admin endpoints).
+"""
 
 from typing import Annotated
 
@@ -23,6 +26,13 @@ from src.core.database import DbSession
 from src.core.exceptions import ErrorResponse
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
+
+RESEND_ACTIVATION_MESSAGE = (
+    "If the account exists and is not activated, a new activation link has been sent."
+)
+FORGOT_PASSWORD_MESSAGE = (
+    "If the account exists and is active, a password reset link has been sent."
+)
 
 
 @router.post(
@@ -126,11 +136,6 @@ async def logout(data: RefreshTokenRequest, db: DbSession) -> None:
     await service.logout_user(db, data.refresh_token)
 
 
-RESEND_ACTIVATION_MESSAGE = (
-    "If the account exists and is not activated, a new activation link has been sent."
-)
-
-
 @router.post("/resend-activation")
 async def resend_activation(data: ResendActivationRequest, db: DbSession) -> MessageResponse:
     """Send a new activation link, for example if the previous one has expired.
@@ -165,11 +170,6 @@ async def change_password(data: ChangePasswordRequest, user: CurrentUser, db: Db
     a digit and a special character. After the change the user logs in with the new password.
     """
     await service.change_password(db, user.id, data.old_password, data.new_password)
-
-
-FORGOT_PASSWORD_MESSAGE = (
-    "If the account exists and is active, a password reset link has been sent."
-)
 
 
 @router.post("/forgot-password")

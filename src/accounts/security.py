@@ -1,11 +1,11 @@
-"""Security helpers of the accounts domain: password validation, hashing and JWT."""
+"""Security helpers of the accounts domain: password validation, hashing and JWT. Owner: P2."""
 
-from datetime import timezone, timedelta, datetime
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import bcrypt
 import jwt
-import secrets
 
 from src.accounts.enums import UserGroupEnum
 from src.core.config import settings

@@ -1,4 +1,4 @@
-"""Pydantic schemas of the accounts domain (request and response bodies)."""
+"""Pydantic schemas of the accounts domain (request and response bodies). Owner: P2."""
 
 from typing import Annotated
 
