@@ -12,6 +12,8 @@ from src.accounts.schemas import (
     UserRegisterRequest,
     AccessTokenResponse,
     RefreshTokenRequest,
+    ResendActivationRequest,
+    MessageResponse,
 )
 
 
@@ -102,3 +104,17 @@ def test_token_pair_response_has_all_three_fields() -> None:
     data = TokenPairResponse(access_token="a", refresh_token="r").model_dump()
 
     assert data == {"access_token": "a", "refresh_token": "r", "token_type": "bearer"}
+
+
+def test_resend_activation_request_lowercases_email() -> None:
+    assert ResendActivationRequest(email="User@Example.COM").email == "user@example.com"
+
+
+def test_resend_activation_request_rejects_invalid_email() -> None:
+    with pytest.raises(ValidationError):
+        ResendActivationRequest(email="not-an-email")
+
+
+def test_message_response_requires_message() -> None:
+    with pytest.raises(ValidationError):
+        MessageResponse()

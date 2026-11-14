@@ -73,3 +73,16 @@ class TokenPairResponse(AccessTokenResponse):
     """Pair of tokens issued on login."""
 
     refresh_token: str = Field(description="Long-lived token used to get a new access token.")
+
+
+class ResendActivationRequest(EmailMixin):
+    """Body of the ``/resend-activation`` request."""
+
+
+class MessageResponse(BaseModel):
+    """Plain text response for requests that must not reveal whether an account exists."""
+
+    message: str = Field(
+        description="Human-readable result of the request.",
+        examples=["If the account exists and is not activated, a new link has been sent."],
+    )
