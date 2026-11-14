@@ -5,11 +5,15 @@ Payment and PaymentItem entities.
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.models import Base
+
+if TYPE_CHECKING:
+    from orders.models import Order, OrderItem
 
 
 class PaymentStatus(str, Enum):
@@ -27,6 +31,7 @@ class Payment(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    order: Mapped["Order"] = relationship("Order", back_populates="payments")
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -51,7 +56,7 @@ class PaymentItem(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     payment_id: Mapped[int] = mapped_column(ForeignKey("payments.id"), nullable=False)
+    order_item: Mapped["OrderItem"] = relationship("OrderItem")
     order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id"), nullable=False)
     price_at_payment: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
-
     payment: Mapped["Payment"] = relationship("Payment", back_populates="items")

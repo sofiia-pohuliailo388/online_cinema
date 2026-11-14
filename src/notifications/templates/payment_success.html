@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Payment Successful — Online Cinema</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 30px auto; background: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); }
+        .success { color: #27ae60; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Payment Confirmation</h2>
+        <p>Thank you for your purchase! Your payment has been successfully processed.</p>
+        <p>Movie/Subscription: <span class="success">{{ movie_title }}</span></p>
+        <p>Amount paid: <strong>{{ amount }}</strong></p>
+        <p style="margin-top: 30px; font-size: 14px; color: #555;">Enjoy watching movies on Online Cinema!</p>
+    </div>
+</body>
+</html>

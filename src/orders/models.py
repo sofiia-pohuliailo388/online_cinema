@@ -11,6 +11,7 @@ from src.core.models import Base, TimestampMixin
 if TYPE_CHECKING:
     from src.accounts.models import User
     from src.movies.models import Movie
+    from src.payments.models import Payment
 
 
 class StatusEnum(StrEnum):
@@ -33,6 +34,9 @@ class Order(Base, TimestampMixin):
 
     order_items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="order")
     user: Mapped["User"] = relationship("User")
+    payments: Mapped[list["Payment"]] = relationship(
+        "Payment", back_populates="order", cascade="all, delete-orphan"
+        )
 
 
 class OrderItem(Base):

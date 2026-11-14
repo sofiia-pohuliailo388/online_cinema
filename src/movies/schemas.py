@@ -61,6 +61,11 @@ class MovieRead(BaseModel):
     time: int
     imdb: float
     votes: int
+    average_rating: float | None = Field(
+        default=None,
+        description="Average user rating from ratings table"
+    )
+    likes_count: int = Field(default=0, description="Total likes count from movie_reactions")
     meta_score: float | None = None
     gross: Decimal | None = None
     description: str
@@ -69,3 +74,35 @@ class MovieRead(BaseModel):
     genres: list[GenreRead] = []
     stars: list[StarRead] = []
     directors: list[DirectorRead] = []
+
+
+class MovieCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    year: int
+    time: int
+    imdb: float
+    votes: int
+    meta_score: float | None = None
+    gross: Decimal | None = None
+    description: str
+    price: Decimal
+    certification_id: int
+    genre_ids: list[int] = []
+    star_ids: list[int] = []
+    director_ids: list[int] = []
+
+
+class MovieUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    year: int | None = None
+    time: int | None = None
+    imdb: float | None = None
+    votes: int | None = None
+    meta_score: float | None = None
+    gross: Decimal | None = None
+    description: str | None = None
+    price: Decimal | None = None
+    certification_id: int | None = None
+    genre_ids: list[int] | None = None
+    star_ids: list[int] | None = None
+    director_ids: list[int] | None = None
