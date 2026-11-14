@@ -33,6 +33,7 @@ class User(TimestampMixin, Base):
 
     group: Mapped["UserGroup"] = relationship(back_populates="users")
     profile: Mapped["UserProfile | None"] = relationship(back_populates="user")
+    notification: Mapped["Notifications"] = relationship(back_populates="user")
     activation_token: Mapped["ActivationToken | None"] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

@@ -6,6 +6,9 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from jinja2 import Environment, FileSystemLoader
 
+from notifications.models import Notification
+
+
 logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -44,7 +47,24 @@ def send_email(to: str, subject: str, template: str, context: dict[str, Any]) ->
 
 async def notify_user(db: AsyncSession, user_id: int, text: str) -> None:
     """CONTRACT: create an in-app notification (e.g. reply/like on a comment).
-
-    TODO(P3): save ``Notification`` row.
     """
     logger.info("NOTIFY user_id=%s text=%s", user_id, text)
+
+    try:
+        db_notification = Notification(
+            user_id=user_id,
+            message=text,
+            is_read=False
+        )
+        db.add(db_notification)
+        await db.commit()
+        await db.refresh(db_notification)
+        logger.info(
+            "[DB] Successfully saved notification ID=%s for user_id=%s",
+            db_notification.id,
+            user_id
+        )
+    except Exception as e:
+        await db.rollback()
+        logger.error("[DB ERROR] Failed to save notification for user_id=%s: %s", user_id, e)
+        raise
