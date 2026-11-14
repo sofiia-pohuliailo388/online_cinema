@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.accounts.dependencies import CurrentUser
+from src.accounts.dependencies import CurrentUser, AdminUser
 from src.cart.schemas import CartItemCreateSchema, CartReadSchema
 from src.cart.service import (
     add_movie_in_cart,
@@ -36,3 +36,9 @@ async def delete_movie_from_cart(db: DbSession, user: CurrentUser, movie_id: int
 @router.delete("/cart", status_code=204)
 async def delete_all_movies_from_cart(db: DbSession, user: CurrentUser) -> None:
     await clear_cart(db, user_id=user.id)
+
+
+@router.get("/cart/{user_id}", status_code=200, response_model=CartReadSchema)
+async def get_cart_for_admin(db: DbSession, admin: AdminUser, user_id: int) -> CartReadSchema:
+    cart = await get_cart_with_items(db, user_id=user_id)
+    return CartReadSchema.model_validate(cart)
