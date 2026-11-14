@@ -5,6 +5,8 @@ To add your domain: import its ``router`` and add one ``include_router`` line.
 
 from fastapi import FastAPI
 
+import src.models  # noqa: F401
+
 from src.core.exceptions import register_exception_handlers
 from src.interactions.router import router as interactions_router
 from src.movies.router import router as movies_router
