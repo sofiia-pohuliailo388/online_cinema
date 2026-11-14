@@ -56,8 +56,12 @@ async def list_genres(db: AsyncSession, pagination: PaginationParams) -> tuple[l
 
     processed_genres = []
     for row in items:
-        genre = row[0]
-        genre.movies_count = row[1]
+        if isinstance(row, tuple):
+            genre = row[0]
+            genre.movies_count = row[1]
+        else:
+            genre = row
+            genre.movies_count = 0
         processed_genres.append(genre)
 
     return processed_genres, total
@@ -119,6 +123,10 @@ async def update_genre(db: AsyncSession, genre_id: int, data: GenreUpdate) -> Ge
 
     await db.commit()
     await db.refresh(genre)
+
+    if hasattr(genre, "movies_count"):
+        delattr(genre, "movies_count")
+
     return genre
 
 

@@ -14,7 +14,7 @@ Layer rules (same for every domain):
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, Response
 
 from src.accounts.dependencies import ModeratorUser
 from src.core.database import DbSession
@@ -152,9 +152,13 @@ async def update_movie(
 
 @router.delete(
     "/movies/{movie_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
     responses={**MODERATOR_ONLY, **NOT_FOUND, **CONFLICT},
 )
-async def delete_movie(movie_id: int, db: DbSession, _: ModeratorUser) -> None:
+async def delete_movie(
+    movie_id: int, db: DbSession, _: ModeratorUser
+) -> dict | None:
     """Delete a movie. Moderator or admin only."""
-    await service.delete_movie(db, movie_id)
+    result = await service.delete_movie(db, movie_id)
+    if result:
+        return result
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
