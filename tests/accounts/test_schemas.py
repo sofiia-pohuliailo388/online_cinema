@@ -14,6 +14,9 @@ from src.accounts.schemas import (
     RefreshTokenRequest,
     ResendActivationRequest,
     MessageResponse,
+    ChangePasswordRequest,
+    ResetPasswordRequest,
+    ForgotPasswordRequest,
 )
 
 
@@ -118,3 +121,61 @@ def test_resend_activation_request_rejects_invalid_email() -> None:
 def test_message_response_requires_message() -> None:
     with pytest.raises(ValidationError):
         MessageResponse()
+
+
+def test_change_password_request_accepts_valid_data() -> None:
+    request = ChangePasswordRequest(old_password="old", new_password="N3w!Str0ngPass")
+
+    assert request.new_password == "N3w!Str0ngPass"
+
+
+def test_change_password_request_does_not_check_old_password_strength() -> None:
+    request = ChangePasswordRequest(old_password="weak", new_password="N3w!Str0ngPass")
+
+    assert request.old_password == "weak"
+
+
+@pytest.mark.parametrize(
+    ("new_password", "message"),
+    [("Sh0rt!a", "at least 8 characters"), ("alllowercase1!", "uppercase letter")],
+    ids=["too_short", "no_uppercase"],
+)
+def test_change_password_request_rejects_weak_new_password(new_password: str, message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        ChangePasswordRequest(old_password="old", new_password=new_password)
+
+
+def test_change_password_request_requires_both_fields() -> None:
+    with pytest.raises(ValidationError):
+        ChangePasswordRequest(old_password="old")
+
+
+def test_forgot_password_request_lowercases_email() -> None:
+    assert ForgotPasswordRequest(email="User@Example.COM").email == "user@example.com"
+
+
+def test_forgot_password_request_rejects_invalid_email() -> None:
+    with pytest.raises(ValidationError):
+        ForgotPasswordRequest(email="not-an-email")
+
+
+def test_reset_password_request_accepts_valid_data() -> None:
+    request = ResetPasswordRequest(token="abc", new_password="N3w!Str0ngPass")
+
+    assert request.token == "abc"
+    assert request.new_password == "N3w!Str0ngPass"
+
+
+@pytest.mark.parametrize(
+    ("new_password", "message"),
+    [("Sh0rt!a", "at least 8 characters"), ("alllowercase1!", "uppercase letter")],
+    ids=["too_short", "no_uppercase"],
+)
+def test_reset_password_request_rejects_weak_new_password(new_password: str, message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        ResetPasswordRequest(token="abc", new_password=new_password)
+
+
+def test_reset_password_request_requires_token() -> None:
+    with pytest.raises(ValidationError):
+        ResetPasswordRequest(new_password="N3w!Str0ngPass")
