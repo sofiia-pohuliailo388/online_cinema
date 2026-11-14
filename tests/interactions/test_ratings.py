@@ -2,6 +2,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError
+
+from src.interactions.schemas import RatingCreate
 
 from src.interactions.models import Rating
 from src.interactions.services.ratings import (
@@ -76,3 +79,9 @@ async def test_get_average_rating_without_ratings(mock_db):
 
     assert average is None
     db.execute.assert_awaited_once()
+
+
+@pytest.mark.parametrize("score", [0, 11, -1, 100])
+def test_rating_score_out_of_range(score):
+    with pytest.raises(ValidationError):
+        RatingCreate(movie_id=10, score=score)
