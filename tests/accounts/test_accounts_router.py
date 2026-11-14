@@ -308,3 +308,250 @@ async def test_resend_activation_rejects_invalid_email(client: AsyncClient) -> N
     response = await client.post(RESEND_URL, json={"email": "not-an-email"})
 
     assert response.status_code == 422
+
+
+CHANGE_PASSWORD_URL = "/api/v1/accounts/change-password"
+NEW_PASSWORD = "N3w!Str0ngPass"
+
+
+def auth_headers(tokens: dict[str, str]) -> dict[str, str]:
+    return {"Authorization": f"Bearer {tokens['access_token']}"}
+
+
+async def test_change_password_switches_login_to_the_new_password(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    tokens = await login_tokens(client, sent_emails)
+
+    response = await client.post(
+        CHANGE_PASSWORD_URL,
+        json={"old_password": VALID_BODY["password"], "new_password": NEW_PASSWORD},
+        headers=auth_headers(tokens),
+    )
+
+    assert response.status_code == 204
+    old_login = await client.post(LOGIN_URL, json=VALID_BODY)
+    new_login = await client.post(
+        LOGIN_URL, json={"email": VALID_BODY["email"], "password": NEW_PASSWORD}
+    )
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
+
+
+async def test_change_password_with_wrong_old_password_returns_400(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    tokens = await login_tokens(client, sent_emails)
+
+    response = await client.post(
+        CHANGE_PASSWORD_URL,
+        json={"old_password": "Wr0ng!Pass", "new_password": NEW_PASSWORD},
+        headers=auth_headers(tokens),
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Old password is incorrect"}
+    assert (await client.post(LOGIN_URL, json=VALID_BODY)).status_code == 200
+
+
+async def test_change_password_rejects_weak_new_password(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    tokens = await login_tokens(client, sent_emails)
+
+    response = await client.post(
+        CHANGE_PASSWORD_URL,
+        json={"old_password": VALID_BODY["password"], "new_password": "weak"},
+        headers=auth_headers(tokens),
+    )
+
+    assert response.status_code == 422
+
+
+async def test_change_password_requires_authentication(client: AsyncClient) -> None:
+    response = await client.post(
+        CHANGE_PASSWORD_URL, json={"old_password": "x", "new_password": NEW_PASSWORD}
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+async def test_change_password_rejects_invalid_token(client: AsyncClient) -> None:
+    response = await client.post(
+        CHANGE_PASSWORD_URL,
+        json={"old_password": "x", "new_password": NEW_PASSWORD},
+        headers={"Authorization": "Bearer garbage"},
+    )
+
+    assert response.status_code == 401
+
+
+FORGOT_URL = "/api/v1/accounts/forgot-password"
+RESET_URL = "/api/v1/accounts/reset-password"
+FORGOT_MESSAGE = "If the account exists and is active, a password reset link has been sent."
+
+
+def reset_token_from(email_message: dict[str, Any]) -> str:
+    """Take the token out of the link of a sent password reset email."""
+    return email_message["context"]["link"].split("token=")[1]
+
+
+async def test_forgot_password_sends_reset_link(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    await register_and_activate(client, sent_emails)
+
+    response = await client.post(FORGOT_URL, json={"email": VALID_BODY["email"]})
+
+    assert response.status_code == 200
+    assert response.json() == {"message": FORGOT_MESSAGE}
+    assert len(sent_emails) == 2  # registration + reset
+    assert sent_emails[1]["to"] == VALID_BODY["email"]
+    assert sent_emails[1]["template"] == "password_reset.html"
+    assert reset_token_from(sent_emails[1])
+
+
+async def test_forgot_password_email_is_case_insensitive(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    await register_and_activate(client, sent_emails)
+
+    response = await client.post(FORGOT_URL, json={"email": "USER@Example.com"})
+
+    assert response.status_code == 200
+    assert len(sent_emails) == 2
+
+
+async def test_forgot_password_answer_is_the_same_for_unknown_email(
+    client: AsyncClient, sent_emails: list[dict[str, Any]]
+) -> None:
+    response = await client.post(FORGOT_URL, json={"email": "nobody@example.com"})
+
+    assert response.status_code == 200
+    assert response.json() == {"message": FORGOT_MESSAGE}
+    assert sent_emails == []
+
+
+async def test_forgot_password_answer_is_the_same_for_inactive_account(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    await client.post(REGISTER_URL, json=VALID_BODY)  # registered, but not activated
+
+    response = await client.post(FORGOT_URL, json={"email": VALID_BODY["email"]})
+
+    assert response.status_code == 200
+    assert response.json() == {"message": FORGOT_MESSAGE}
+    assert len(sent_emails) == 1  # only the activation email
+
+
+async def test_forgot_password_rejects_invalid_email(client: AsyncClient) -> None:
+    response = await client.post(FORGOT_URL, json={"email": "not-an-email"})
+
+    assert response.status_code == 422
+
+
+async def test_reset_password_switches_login_to_the_new_password(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    await register_and_activate(client, sent_emails)
+    await client.post(FORGOT_URL, json={"email": VALID_BODY["email"]})
+    token = reset_token_from(sent_emails[1])
+
+    response = await client.post(RESET_URL, json={"token": token, "new_password": NEW_PASSWORD})
+
+    assert response.status_code == 204
+    assert response.content == b""
+    old_login = await client.post(LOGIN_URL, json=VALID_BODY)
+    new_login = await client.post(
+        LOGIN_URL, json={"email": VALID_BODY["email"], "password": NEW_PASSWORD}
+    )
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
+
+
+async def test_reset_token_works_only_once(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    await register_and_activate(client, sent_emails)
+    await client.post(FORGOT_URL, json={"email": VALID_BODY["email"]})
+    token = reset_token_from(sent_emails[1])
+    await client.post(RESET_URL, json={"token": token, "new_password": NEW_PASSWORD})
+
+    response = await client.post(RESET_URL, json={"token": token, "new_password": "An0ther!Pass99"})
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid or expired reset token"}
+    login = await client.post(
+        LOGIN_URL, json={"email": VALID_BODY["email"], "password": NEW_PASSWORD}
+    )
+    assert login.status_code == 200  # the first reset password is still the valid one
+
+
+async def test_new_forgot_request_invalidates_the_previous_link(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    await register_and_activate(client, sent_emails)
+    await client.post(FORGOT_URL, json={"email": VALID_BODY["email"]})
+    await client.post(FORGOT_URL, json={"email": VALID_BODY["email"]})
+    old_token = reset_token_from(sent_emails[1])
+    new_token = reset_token_from(sent_emails[2])
+
+    old_response = await client.post(
+        RESET_URL, json={"token": old_token, "new_password": NEW_PASSWORD}
+    )
+    new_response = await client.post(
+        RESET_URL, json={"token": new_token, "new_password": NEW_PASSWORD}
+    )
+
+    assert old_response.status_code == 400
+    assert new_response.status_code == 204
+
+
+async def test_reset_password_logs_out_all_devices(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    tokens = await login_tokens(client, sent_emails)
+    second_device = (await client.post(LOGIN_URL, json=VALID_BODY)).json()
+    await client.post(FORGOT_URL, json={"email": VALID_BODY["email"]})
+    token = reset_token_from(sent_emails[1])
+
+    await client.post(RESET_URL, json={"token": token, "new_password": NEW_PASSWORD})
+
+    for device in (tokens, second_device):
+        response = await client.post(REFRESH_URL, json={"refresh_token": device["refresh_token"]})
+        assert response.status_code == 401
+
+
+async def test_reset_password_with_unknown_token_returns_400(client: AsyncClient) -> None:
+    response = await client.post(RESET_URL, json={"token": "unknown", "new_password": NEW_PASSWORD})
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid or expired reset token"}
+
+
+async def test_reset_password_rejects_weak_password_and_keeps_the_token(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    await register_and_activate(client, sent_emails)
+    await client.post(FORGOT_URL, json={"email": VALID_BODY["email"]})
+    token = reset_token_from(sent_emails[1])
+
+    weak = await client.post(RESET_URL, json={"token": token, "new_password": "weak"})
+    retry = await client.post(RESET_URL, json={"token": token, "new_password": NEW_PASSWORD})
+
+    assert weak.status_code == 422
+    assert retry.status_code == 204
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"token": "abc"}, {"new_password": NEW_PASSWORD}, {}],
+    ids=["missing_password", "missing_token", "empty_body"],
+)
+async def test_reset_password_rejects_incomplete_body(
+    client: AsyncClient, body: dict[str, str]
+) -> None:
+    response = await client.post(RESET_URL, json=body)
+
+    assert response.status_code == 422
