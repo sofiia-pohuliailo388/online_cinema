@@ -14,7 +14,8 @@ from src.accounts.schemas import (
     RefreshTokenRequest,
     ResendActivationRequest,
     MessageResponse,
-    ChangePasswordRequest, ResetPasswordRequest,
+    ChangePasswordRequest,
+    ResetPasswordRequest,
 )
 
 

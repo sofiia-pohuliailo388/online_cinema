@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.accounts.enums import UserGroupEnum
-from src.accounts.models import User, UserGroup, ActivationToken, RefreshToken
+from src.accounts.models import User, UserGroup, ActivationToken, RefreshToken, PasswordResetToken
 from src.accounts.security import (
     hash_password,
     generate_token,
@@ -23,6 +23,8 @@ from src.core.exceptions import (
     PermissionDeniedError,
 )
 from src.notifications.service import send_email
+
+PASSWORD_RESET_TOKEN_TTL = timedelta(hours=1)
 
 
 def _is_expired(expires_at: datetime) -> bool:
@@ -88,6 +90,22 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
+    """Return a user by email with the group already loaded.
+
+    Args:
+        db: Database session.
+        email: Email of the user (already normalized to lower case).
+
+    Returns:
+        The user (with ``user.group`` loaded), or ``None`` if there is no such user.
+    """
+    result = await db.execute(
+        select(User).options(selectinload(User.group)).where(User.email == email),
+    )
+    return result.scalar_one_or_none()
+
+
 def build_activation_link(token: str) -> str:
     """Build the link from the activation email.
 
@@ -98,6 +116,18 @@ def build_activation_link(token: str) -> str:
         Absolute URL of the activation endpoint with the token as a query parameter.
     """
     return f"{settings.APP_BASE_URL}/api/v1/accounts/activate?token={token}"
+
+
+def build_password_reset_link(token: str) -> str:
+    """Build the link from the password reset email.
+
+    Args:
+        token: Password reset token of the user.
+
+    Returns:
+        URL of the reset page with the token as a query parameter.
+    """
+    return f"{settings.APP_BASE_URL}/reset-password?token={token}"
 
 
 async def register_user(db: AsyncSession, email: str, password: str) -> User:
@@ -118,7 +148,7 @@ async def register_user(db: AsyncSession, email: str, password: str) -> User:
         ConflictError: If a user with this email already exists.
         RuntimeError: If the default ``USER`` group is missing (migrations were not applied).
     """
-    existing_user = await db.scalar(select(User).where(User.email == email))
+    existing_user = await get_user_by_email(db, email)
     if existing_user is not None:
         raise ConflictError("User with this email already exists")
 
@@ -203,9 +233,7 @@ async def login_user(db: AsyncSession, email: str, password: str) -> tuple[str, 
             (the same message for both, so that registered emails are not revealed).
         PermissionDeniedError: If the credentials are right, but the account is not activated.
     """
-    user = await db.scalar(
-        select(User).options(selectinload(User.group)).where(User.email == email),
-    )
+    user = await get_user_by_email(db, email)
     if user is None or not verify_password(password, user.hashed_password):
         raise UnauthorizedError("Invalid email or password")
 
@@ -278,7 +306,7 @@ async def resend_activation(db: AsyncSession, email: str) -> None:
         db: Database session.
         email: Email of the user (already normalized to lower case).
     """
-    user = await db.scalar(select(User).where(User.email == email))
+    user = await get_user_by_email(db, email)
     if user is None or user.is_active:
         return
 
@@ -292,7 +320,10 @@ async def resend_activation(db: AsyncSession, email: str) -> None:
 
 
 async def change_password(
-    db: AsyncSession, user_id: int, old_password: str, new_password: str
+    db: AsyncSession,
+    user_id: int,
+    old_password: str,
+    new_password: str,
 ) -> None:
     """Change the password of a user who knows the old one.
 
@@ -315,4 +346,65 @@ async def change_password(
         raise BadRequestError("Old password is incorrect")
 
     user.hashed_password = hash_password(new_password)
+    await db.commit()
+
+
+async def forgot_password(db: AsyncSession, email: str) -> None:
+    """Send a password reset link to an active account.
+
+    The old reset token is replaced with a new one, valid for ``PASSWORD_RESET_TOKEN_TTL``.
+    Nothing happens if there is no such user or the account is not active, so the caller can
+    answer the same way in all cases and the registered emails are not revealed.
+
+    Args:
+        db: Database session.
+        email: Email of the user (already normalized to lower case).
+    """
+    user = await get_user_by_email(db, email)
+    if user is None or not user.is_active:
+        return
+
+    await db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id))
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        token=generate_token(),
+        expires_at=datetime.now(timezone.utc) + PASSWORD_RESET_TOKEN_TTL,
+    )
+    db.add(reset_token)
+    await db.commit()
+
+    send_email(
+        to=user.email,
+        subject="Password reset",
+        template="password_reset.html",
+        context={"link": build_password_reset_link(reset_token.token)},
+    )
+
+
+async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
+    """Set a new password with the token from the reset email.
+
+    The token is deleted, so it can be used only once. All refresh tokens of the user are
+    deleted too, so nobody stays logged in with the old password.
+
+    Args:
+        db: Database session.
+        token: Password reset token from the email link.
+        new_password: New plain-text password, already validated for strength.
+
+    Raises:
+        BadRequestError: If the token does not exist or has expired.
+    """
+    reset_token = await db.scalar(
+        select(PasswordResetToken).where(PasswordResetToken.token == token),
+    )
+    if reset_token is None or _is_expired(reset_token.expires_at):
+        raise BadRequestError("Invalid or expired reset token")
+
+    user_id = reset_token.user_id
+    user = await db.get(User, user_id)
+    user.hashed_password = hash_password(new_password)
+
+    await db.delete(reset_token)
+    await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
     await db.commit()
