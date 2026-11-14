@@ -7,7 +7,9 @@ from fastapi import APIRouter, Query, status
 from src.accounts import service
 from src.accounts.schemas import (
     AccessTokenResponse,
+    MessageResponse,
     RefreshTokenRequest,
+    ResendActivationRequest,
     TokenPairResponse,
     UserLoginRequest,
     UserRead,
@@ -118,3 +120,20 @@ async def logout(data: RefreshTokenRequest, db: DbSession) -> None:
     with the same token is not an error.
     """
     await service.logout_user(db, data.refresh_token)
+
+
+RESEND_ACTIVATION_MESSAGE = (
+    "If the account exists and is not activated, a new activation link has been sent."
+)
+
+
+@router.post("/resend-activation")
+async def resend_activation(data: ResendActivationRequest, db: DbSession) -> MessageResponse:
+    """Send a new activation link, for example if the previous one has expired.
+
+    The old link stops working and the new one is valid for 24 hours. The answer is always the
+    same, whether such an email exists, is already activated or not, so that nobody can find out
+    which emails are registered.
+    """
+    await service.resend_activation(db, data.email)
+    return MessageResponse(message=RESEND_ACTIVATION_MESSAGE)
