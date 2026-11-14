@@ -1,4 +1,5 @@
 """Business logic of the orders domain (owner: P6)."""
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import select, delete
@@ -78,7 +79,7 @@ async def mark_order_paid(db: AsyncSession, order_id: int) -> None:
         await db.commit()
 
 
-async def create_order(db: AsyncSession, user_id: int):
+async def create_order(db: AsyncSession, user_id: int) -> dict:
     cart = await get_cart_with_items(db, user_id)
     if cart is None:
         raise NotFoundError("Cart is not found")
@@ -151,3 +152,57 @@ async def create_order(db: AsyncSession, user_id: int):
         },
         "excluded_movie_ids": list(purchased_movie_ids)
     }
+
+
+async def cancel_order(db: AsyncSession, user_id: int, order_id: int):
+    order = await db.scalar(select(Order).where(Order.user_id == user_id, Order.id == order_id))
+    if order is None:
+        raise NotFoundError("Order is not found")
+    if order.status == StatusEnum.CANCELED:
+        raise ConflictError("Order is already canceled")
+    if order.status == StatusEnum.PAID:
+        raise ConflictError("Order is already paid")
+    if order.status == StatusEnum.PENDING:
+        order.status = StatusEnum.CANCELED
+
+    await db.commit()
+
+    return order
+
+
+async def get_user_orders(db: AsyncSession, user_id: int) -> list[Order]:
+    orders = (await db.scalars(select(Order).where(Order.user_id == user_id))).all()
+    return list(orders)
+
+
+async def get_order_by_id(db: AsyncSession, user_id: int, order_id: int) -> Order:
+    order = await db.scalar(select(Order).where(Order.user_id == user_id, Order.id == order_id))
+    if order is None:
+        raise NotFoundError(f"Order {order_id} is not found")
+
+    return order
+
+
+async def get_all_orders(
+        db: AsyncSession,
+        user_id: int | None = None,
+        status: StatusEnum | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+) -> list[Order]:
+    stmt = select(Order)
+    if user_id is not None:
+        stmt = stmt.where(Order.user_id == user_id)
+
+    if status is not None:
+        stmt = stmt.where(Order.status == status)
+
+    if date_from is not None:
+        stmt = stmt.where(Order.created_at >= date_from)
+
+    if date_to is not None:
+        stmt = stmt.where(Order.created_at <= date_to)
+
+    orders = (await db.scalars(stmt)).all()
+
+    return list(orders)
