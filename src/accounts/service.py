@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -24,6 +24,21 @@ from src.core.exceptions import (
     PermissionDeniedError,
 )
 from src.notifications.service import send_email
+
+
+def _is_expired(expires_at: datetime) -> bool:
+    """Tell whether an expiration time has already passed.
+
+    Args:
+        expires_at: Expiration time of a token (naive values are treated as UTC).
+
+    Returns:
+        ``True`` if the time is in the past.
+    """
+    if expires_at.tzinfo is None:
+        # SQLite returns naive datetimes, Postgres aware ones.
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at < datetime.now(timezone.utc)
 
 
 async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
@@ -133,16 +148,12 @@ async def activate_user(db: AsyncSession, token: str) -> User:
         BadRequestError: If the token does not exist or has expired.
     """
     activation_token = await db.scalar(
-        select(ActivationToken).where(ActivationToken.token == token)
+        select(ActivationToken).where(ActivationToken.token == token),
     )
     if activation_token is None:
         raise BadRequestError("Invalid activation token")
 
-    expires_at = activation_token.expires_at
-    if expires_at.tzinfo is None:
-        # SQLite returns naive datetimes, Postgres aware ones.
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < datetime.now(timezone.utc):
+    if _is_expired(activation_token.expires_at):
         raise BadRequestError("Activation token has expired")
 
     user = await db.scalar(select(User).where(User.id == activation_token.user_id))
@@ -174,7 +185,7 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenPairRe
         PermissionDeniedError: If the credentials are right, but the account is not activated.
     """
     user = await db.scalar(
-        select(User).options(selectinload(User.group)).where(User.email == email)
+        select(User).options(selectinload(User.group)).where(User.email == email),
     )
     if user is None or not verify_password(password, user.hashed_password):
         raise UnauthorizedError("Invalid email or password")
@@ -189,8 +200,48 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenPairRe
             user_id=user.id,
             token=refresh_token,
             expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_TTL_DAYS),
-        )
+        ),
     )
     await db.commit()
 
     return TokenPairResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+async def refresh_access_token(db: AsyncSession, refresh_token: str) -> str:
+    """Issue a new access token for a valid refresh token.
+
+    The refresh token itself is not changed: it stays valid until it expires or until logout.
+
+    Args:
+        db: Database session.
+        refresh_token: Refresh token received on login.
+
+    Returns:
+        A new JWT access token.
+
+    Raises:
+        UnauthorizedError: If the refresh token does not exist or has expired.
+        PermissionDeniedError: If the account is not active.
+    """
+    stored = await db.scalar(select(RefreshToken).where(RefreshToken.token == refresh_token))
+    if stored is None or _is_expired(stored.expires_at):
+        raise UnauthorizedError("Invalid or expired refresh token")
+
+    user = await get_user_by_id(db, stored.user_id)
+    if user is None or not user.is_active:
+        raise PermissionDeniedError("Account is not activated")
+
+    return create_access_token(user.id, user.group.name)
+
+
+async def logout_user(db: AsyncSession, refresh_token: str) -> None:
+    """Revoke a refresh token, so it can not be used to get new access tokens.
+
+    Does nothing if the token does not exist (a repeated logout is not an error).
+
+    Args:
+        db: Database session.
+        refresh_token: Refresh token to delete.
+    """
+    await db.execute(delete(RefreshToken).where(RefreshToken.token == refresh_token))
+    await db.commit()
