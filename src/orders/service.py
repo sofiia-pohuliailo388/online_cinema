@@ -9,12 +9,17 @@ from sqlalchemy.orm import selectinload
 from cart.models import Cart, CartItem
 from cart.service import get_cart_with_items
 from core.exceptions import NotFoundError, ConflictError
+from core.pagination import PaginationParams, paginate
 from movies.models import Movie
 from orders.models import Order, OrderItem, StatusEnum
 
 
 async def is_movie_purchased(db: AsyncSession, user_id: int, movie_id: int) -> bool:
-    """CONTRACT: has the user a PAID order containing this movie?    """
+    """Check whether a user has purchased a movie.
+
+    Returns:
+        True if the user has a paid order containing the movie.
+    """
     return bool(
         await db.scalar(
             select(
@@ -32,7 +37,11 @@ async def is_movie_purchased(db: AsyncSession, user_id: int, movie_id: int) -> b
 
 
 async def is_movie_purchased_by_anyone(db: AsyncSession, movie_id: int) -> bool:
-    """CONTRACT for P4: forbid deleting a movie that somebody has bought.    """
+    """Check whether a movie has been purchased by any user.
+
+    Returns:
+        True if at least one paid order contains the movie.
+    """
     return bool(
         await db.scalar(
             select(
@@ -52,12 +61,23 @@ async def mark_order_paid(db: AsyncSession, order_id: int) -> None:
     """CONTRACT for P7: set status to ``paid`` and remove paid movies from the user's cart.
 
     Called from the Stripe webhook. Must be idempotent (safe to call twice).    """
+    """Mark an order as paid and remove purchased movies from the cart.
+
+    Repeated calls for an already paid order have no effect.
+
+    Raises:
+        NotFoundError: If the order does not exist.
+        ConflictError: If the order has been canceled.
+    """
     order = await db.scalar(select(Order).where(Order.id == order_id))
     if order is None:
         raise NotFoundError(f"Order {order_id} is not found")
 
     if order.status == StatusEnum.CANCELED:
         raise ConflictError(f"Order {order_id} is canceled")
+
+    if order.status == StatusEnum.PAID:
+        return
 
     order.status = StatusEnum.PAID
 
@@ -77,10 +97,22 @@ async def mark_order_paid(db: AsyncSession, order_id: int) -> None:
         )
 
         await db.execute(stmt)
-        await db.commit()
+    await db.commit()
 
 
 async def create_order(db: AsyncSession, user_id: int) -> dict:
+    """Create an order from the user's cart.
+
+    Exclude previously purchased movies and calculate the order total.
+
+    Returns:
+        Order details and IDs of excluded purchased movies.
+
+    Raises:
+        NotFoundError: If the cart or required movies do not exist.
+        ConflictError: If the cart is empty, all movies are purchased,
+            or selected movies exist in pending orders.
+    """
     cart = await get_cart_with_items(db, user_id)
     if cart is None:
         raise NotFoundError("Cart is not found")
@@ -162,8 +194,21 @@ async def create_order(db: AsyncSession, user_id: int) -> dict:
     }
 
 
-async def cancel_order(db: AsyncSession, user_id: int, order_id: int):
-    order = await db.scalar(select(Order).where(Order.user_id == user_id, Order.id == order_id))
+async def cancel_order(db: AsyncSession, user_id: int, order_id: int) -> Order:
+    """Cancel a user's pending order.
+
+    Returns:
+        The canceled order.
+
+    Raises:
+        NotFoundError: If the order does not belong to the user or does not exist.
+        ConflictError: If the order is already paid or canceled.
+    """
+    order = await db.scalar(
+        select(Order)
+        .where(Order.user_id == user_id, Order.id == order_id)
+        .options(selectinload(Order.order_items))
+    )
     if order is None:
         raise NotFoundError("Order is not found")
     if order.status == StatusEnum.CANCELED:
@@ -178,18 +223,33 @@ async def cancel_order(db: AsyncSession, user_id: int, order_id: int):
     return order
 
 
-async def get_user_orders(db: AsyncSession, user_id: int) -> list[Order]:
-    orders = (
-        await db.scalars(
-            select(Order)
-            .where(Order.user_id == user_id)
-            .options(selectinload(Order.order_items))
-        )
-    ).all()
-    return list(orders)
+async def get_user_orders(
+        db: AsyncSession,
+        user_id: int,
+        pagination: PaginationParams
+) -> tuple[list[Order], int]:
+    """Retrieve a user's orders with pagination.
+
+    Returns:
+        A tuple containing the orders and their total count.
+    """
+    stmt = (
+        select(Order)
+        .where(Order.user_id == user_id)
+        .options(selectinload(Order.order_items))
+        .order_by(Order.created_at.desc())
+    )
+    orders, total = await paginate(db, stmt, pagination)
+
+    return orders, total
 
 
 async def get_order_by_id(db: AsyncSession, user_id: int, order_id: int) -> Order:
+    """Retrieve a specific order belonging to the user.
+
+    Raises:
+        NotFoundError: If the order does not exist or belongs to another user.
+    """
     order = await db.scalar(
         select(Order)
         .where(
@@ -206,11 +266,19 @@ async def get_order_by_id(db: AsyncSession, user_id: int, order_id: int) -> Orde
 
 async def get_all_orders(
         db: AsyncSession,
+        pagination: PaginationParams,
         user_id: int | None = None,
         status: StatusEnum | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-) -> list[Order]:
+) -> tuple[list[Order], int]:
+    """Retrieve paginated orders with optional administrative filters.
+
+    Filter by user, status, and creation date range.
+
+    Returns:
+        A tuple containing the filtered orders and their total count.
+    """
     stmt = select(Order)
     if user_id is not None:
         stmt = stmt.where(Order.user_id == user_id)
@@ -224,6 +292,8 @@ async def get_all_orders(
     if date_to is not None:
         stmt = stmt.where(Order.created_at <= date_to)
 
-    orders = (await db.scalars(stmt.options(selectinload(Order.order_items)))).all()
+    stmt = stmt.options(selectinload(Order.order_items)).order_by(Order.created_at.desc())
 
-    return list(orders)
+    orders, total = await paginate(db, stmt, pagination)
+
+    return orders, total
