@@ -40,6 +40,38 @@ def _is_expired(expires_at: datetime) -> bool:
     return expires_at < datetime.now(timezone.utc)
 
 
+def _new_activation_token(user_id: int) -> ActivationToken:
+    """Build a new activation token valid for ``ACTIVATION_TOKEN_TTL_HOURS`` hours.
+
+    Args:
+        user_id: Id of the user the token is for.
+
+    Returns:
+        A new token, not saved to the DB yet.
+    """
+    return ActivationToken(
+        user_id=user_id,
+        token=generate_token(),
+        expires_at=datetime.now(timezone.utc)
+        + timedelta(hours=settings.ACTIVATION_TOKEN_TTL_HOURS),
+    )
+
+
+def _send_activation_email(email: str, token: str) -> None:
+    """Send the email with the activation link.
+
+    Args:
+        email: Address of the user.
+        token: Activation token to put into the link.
+    """
+    send_email(
+        to=email,
+        subject="Activation link",
+        template="activation.html",
+        context={"link": build_activation_link(token)},
+    )
+
+
 async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     """Return a user by id with the group already loaded.
 
@@ -102,12 +134,7 @@ async def register_user(db: AsyncSession, email: str, password: str) -> User:
     db.add(user)
     await db.flush()
 
-    activation_token = ActivationToken(
-        user_id=user.id,
-        token=generate_token(),
-        expires_at=datetime.now(timezone.utc)
-        + timedelta(hours=settings.ACTIVATION_TOKEN_TTL_HOURS),
-    )
+    activation_token = _new_activation_token(user_id=user.id)
     db.add(activation_token)
 
     try:
@@ -117,14 +144,7 @@ async def register_user(db: AsyncSession, email: str, password: str) -> User:
         await db.rollback()
         raise ConflictError("User with this email already exists") from exc
 
-    send_email(
-        to=user.email,
-        subject="Activation link",
-        template="activation.html",
-        context={
-            "link": build_activation_link(activation_token.token),
-        },
-    )
+    _send_activation_email(user.email, activation_token.token)
 
     await db.refresh(user)
 
@@ -244,3 +264,28 @@ async def logout_user(db: AsyncSession, refresh_token: str) -> None:
     """
     await db.execute(delete(RefreshToken).where(RefreshToken.token == refresh_token))
     await db.commit()
+
+
+async def resend_activation(db: AsyncSession, email: str) -> None:
+    """Replace the activation token of a not yet activated account and send a new link.
+
+    The old token (if any, even an expired one) is deleted and a new one, valid for
+    ``ACTIVATION_TOKEN_TTL_HOURS`` hours, is created. Nothing happens if there is no such user
+    or the account is already active, so the caller can answer the same way in all cases and
+    the registered emails are not revealed.
+
+    Args:
+        db: Database session.
+        email: Email of the user (already normalized to lower case).
+    """
+    user = await db.scalar(select(User).where(User.email == email))
+    if user is None or user.is_active:
+        return
+
+    await db.execute(delete(ActivationToken).where(ActivationToken.user_id == user.id))
+
+    activation_token = _new_activation_token(user.id)
+    db.add(activation_token)
+    await db.commit()
+
+    _send_activation_email(user.email, activation_token.token)
