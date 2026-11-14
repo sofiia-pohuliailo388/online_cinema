@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from cart.models import Cart, CartItem
 from cart.service import get_cart_with_items
@@ -134,7 +135,14 @@ async def create_order(db: AsyncSession, user_id: int) -> dict:
     db.add(order)
     await db.flush()
 
-    order_items = [OrderItem(order_id=order.id, movie_id=movie.id, price_at_order=movie.price) for movie in movies]
+    order_items = [
+        OrderItem(
+            order_id=order.id,
+            movie_id=movie.id,
+            price_at_order=movie.price
+        )
+        for movie in movies
+    ]
     db.add_all(order_items)
 
     order.total_amount = sum(
@@ -171,12 +179,25 @@ async def cancel_order(db: AsyncSession, user_id: int, order_id: int):
 
 
 async def get_user_orders(db: AsyncSession, user_id: int) -> list[Order]:
-    orders = (await db.scalars(select(Order).where(Order.user_id == user_id))).all()
+    orders = (
+        await db.scalars(
+            select(Order)
+            .where(Order.user_id == user_id)
+            .options(selectinload(Order.order_items))
+        )
+    ).all()
     return list(orders)
 
 
 async def get_order_by_id(db: AsyncSession, user_id: int, order_id: int) -> Order:
-    order = await db.scalar(select(Order).where(Order.user_id == user_id, Order.id == order_id))
+    order = await db.scalar(
+        select(Order)
+        .where(
+            Order.user_id == user_id,
+            Order.id == order_id
+        )
+        .options(selectinload(Order.order_items))
+    )
     if order is None:
         raise NotFoundError(f"Order {order_id} is not found")
 
@@ -203,6 +224,6 @@ async def get_all_orders(
     if date_to is not None:
         stmt = stmt.where(Order.created_at <= date_to)
 
-    orders = (await db.scalars(stmt)).all()
+    orders = (await db.scalars(stmt.options(selectinload(Order.order_items)))).all()
 
     return list(orders)
