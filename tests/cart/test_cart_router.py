@@ -1,6 +1,6 @@
-
 import pytest
 
+from src.accounts.enums import UserGroupEnum
 from src.cart.service import add_movie_in_cart
 
 
@@ -124,5 +124,46 @@ async def test_clear_nonexistent_cart_endpoint(client, login_as, test_user):
     login_as(user_id=test_user.id)
 
     response = await client.delete("/api/v1/cart")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_get_user_cart_success(
+    client, login_as, db_session, movie, test_user
+):
+    await add_movie_in_cart(db_session, movie.id, test_user.id)
+    login_as(UserGroupEnum.ADMIN)
+
+    response = await client.get(f"/api/v1/cart/{test_user.id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["cart_items"]) == 1
+    assert body["cart_items"][0]["movie_id"] == movie.id
+    assert len(body["cart_items"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_get_user_cart_unauthenticated(client, test_user):
+    response = await client.get(f"/api/v1/cart/{test_user.id}")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_get_user_cart_forbidden(client, login_as, test_user):
+    login_as(UserGroupEnum.USER, user_id=test_user.id)
+
+    response = await client.get(f"/api/v1/cart/{test_user.id}")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_get_nonexistent_user_cart(client, login_as):
+    login_as(UserGroupEnum.ADMIN)
+
+    response = await client.get("/api/v1/cart/999999")
 
     assert response.status_code == 404
