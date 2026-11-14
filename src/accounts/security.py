@@ -14,6 +14,9 @@ from src.core.exceptions import UnauthorizedError
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_BYTES = 72  # bcrypt limit
 JWT_ALGORITHM = "HS256"
+# Hash of a random password nobody knows. Login checks a wrong email against it,
+# so that an unknown email takes as long to answer as a wrong password.
+DUMMY_PASSWORD_HASH = "$2b$12$l7Veqti5f2Ws15ke5KWyJ.fISOPziS7Rk6gPZ3O8s3Lg920TxVOYK"
 
 
 def validate_password_strength(password: str) -> str:
@@ -108,10 +111,16 @@ def decode_token(token: str) -> dict[str, Any]:
         The decoded payload.
 
     Raises:
-        UnauthorizedError: If the token is malformed, has a wrong signature or has expired.
+        UnauthorizedError: If the token is malformed, has a wrong signature, has no
+            expiration time or has expired.
     """
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        return jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+            options={"require": ["exp"]},
+        )
     except jwt.InvalidTokenError as exc:
         raise UnauthorizedError("Invalid or expired token") from exc
 

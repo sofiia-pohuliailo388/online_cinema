@@ -19,6 +19,7 @@ from src.accounts.models import (
     UserGroup,
 )
 from src.accounts.security import (
+    DUMMY_PASSWORD_HASH,
     create_access_token,
     generate_token,
     hash_password,
@@ -242,7 +243,11 @@ async def login_user(db: AsyncSession, email: str, password: str) -> tuple[str, 
         PermissionDeniedError: If the credentials are right, but the account is not activated.
     """
     user = await get_user_by_email(db, email)
-    if user is None or not verify_password(password, user.hashed_password):
+    # The password is always checked (against a dummy hash for an unknown email), so the
+    # response time does not reveal whether the email is registered.
+    password_hash = user.hashed_password if user is not None else DUMMY_PASSWORD_HASH
+    password_is_valid = verify_password(password, password_hash)
+    if user is None or not password_is_valid:
         raise UnauthorizedError("Invalid email or password")
 
     if not user.is_active:
