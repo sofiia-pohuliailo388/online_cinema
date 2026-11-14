@@ -1,12 +1,14 @@
-"""HTTP endpoints of the accounts domain: registration, activation, login, refresh, logout."""
+"""HTTP endpoints of the accounts domain: registration, login, tokens and passwords."""
 
 from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
 from src.accounts import service
+from src.accounts.dependencies import CurrentUser
 from src.accounts.schemas import (
     AccessTokenResponse,
+    ChangePasswordRequest,
     MessageResponse,
     RefreshTokenRequest,
     ResendActivationRequest,
@@ -137,3 +139,27 @@ async def resend_activation(data: ResendActivationRequest, db: DbSession) -> Mes
     """
     await service.resend_activation(db, data.email)
     return MessageResponse(message=RESEND_ACTIVATION_MESSAGE)
+
+
+@router.post(
+    "/change-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorResponse,
+            "description": "Old password is incorrect",
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": "Not authenticated or invalid token",
+        },
+    },
+)
+async def change_password(data: ChangePasswordRequest, user: CurrentUser, db: DbSession) -> None:
+    """Change the password of the current user.
+
+    Requires the ``Authorization: Bearer <access_token>`` header. The old password must be
+    correct. The new password must have at least 8 characters, an upper and a lower case letter,
+    a digit and a special character. After the change the user logs in with the new password.
+    """
+    await service.change_password(db, user.id, data.old_password, data.new_password)

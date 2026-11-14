@@ -308,3 +308,80 @@ async def test_resend_activation_rejects_invalid_email(client: AsyncClient) -> N
     response = await client.post(RESEND_URL, json={"email": "not-an-email"})
 
     assert response.status_code == 422
+
+
+CHANGE_PASSWORD_URL = "/api/v1/accounts/change-password"
+NEW_PASSWORD = "N3w!Str0ngPass"
+
+
+def auth_headers(tokens: dict[str, str]) -> dict[str, str]:
+    return {"Authorization": f"Bearer {tokens['access_token']}"}
+
+
+async def test_change_password_switches_login_to_the_new_password(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    tokens = await login_tokens(client, sent_emails)
+
+    response = await client.post(
+        CHANGE_PASSWORD_URL,
+        json={"old_password": VALID_BODY["password"], "new_password": NEW_PASSWORD},
+        headers=auth_headers(tokens),
+    )
+
+    assert response.status_code == 204
+    old_login = await client.post(LOGIN_URL, json=VALID_BODY)
+    new_login = await client.post(
+        LOGIN_URL, json={"email": VALID_BODY["email"], "password": NEW_PASSWORD}
+    )
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
+
+
+async def test_change_password_with_wrong_old_password_returns_400(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    tokens = await login_tokens(client, sent_emails)
+
+    response = await client.post(
+        CHANGE_PASSWORD_URL,
+        json={"old_password": "Wr0ng!Pass", "new_password": NEW_PASSWORD},
+        headers=auth_headers(tokens),
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Old password is incorrect"}
+    assert (await client.post(LOGIN_URL, json=VALID_BODY)).status_code == 200
+
+
+async def test_change_password_rejects_weak_new_password(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    tokens = await login_tokens(client, sent_emails)
+
+    response = await client.post(
+        CHANGE_PASSWORD_URL,
+        json={"old_password": VALID_BODY["password"], "new_password": "weak"},
+        headers=auth_headers(tokens),
+    )
+
+    assert response.status_code == 422
+
+
+async def test_change_password_requires_authentication(client: AsyncClient) -> None:
+    response = await client.post(
+        CHANGE_PASSWORD_URL, json={"old_password": "x", "new_password": NEW_PASSWORD}
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+async def test_change_password_rejects_invalid_token(client: AsyncClient) -> None:
+    response = await client.post(
+        CHANGE_PASSWORD_URL,
+        json={"old_password": "x", "new_password": NEW_PASSWORD},
+        headers={"Authorization": "Bearer garbage"},
+    )
+
+    assert response.status_code == 401
