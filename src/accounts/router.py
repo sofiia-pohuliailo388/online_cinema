@@ -1,11 +1,20 @@
-"""HTTP endpoints of the accounts domain: registration and account activation."""
+"""HTTP endpoints of the accounts domain: registration, activation, login, refresh, logout."""
 
 from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
 from src.accounts import service
-from src.accounts.schemas import UserRead, UserRegisterRequest, TokenPairResponse, UserLoginRequest
+from src.accounts.schemas import (
+    AccessTokenResponse,
+    MessageResponse,
+    RefreshTokenRequest,
+    ResendActivationRequest,
+    TokenPairResponse,
+    UserLoginRequest,
+    UserRead,
+    UserRegisterRequest,
+)
 from src.core.database import DbSession
 from src.core.exceptions import ErrorResponse
 
@@ -75,4 +84,56 @@ async def login(data: UserLoginRequest, db: DbSession) -> TokenPairResponse:
     the server (a user can have several, one per device) and is used to get a new access token.
     The email is case-insensitive. A wrong email and a wrong password give the same error.
     """
-    return await service.login_user(db, data.email, data.password)
+    access_token, refresh_token = await service.login_user(db, data.email, data.password)
+    return TokenPairResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post(
+    "/refresh",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": "Invalid or expired refresh token",
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "model": ErrorResponse,
+            "description": "Account is not activated",
+        },
+    },
+)
+async def refresh(data: RefreshTokenRequest, db: DbSession) -> AccessTokenResponse:
+    """Get a new access token with the refresh token received on login.
+
+    The access token is short-lived, the refresh token lives much longer. The refresh token
+    itself does not change: it stays valid until it expires or until ``/logout``.
+    """
+    access_token = await service.refresh_access_token(db, data.refresh_token)
+    return AccessTokenResponse(access_token=access_token)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(data: RefreshTokenRequest, db: DbSession) -> None:
+    """Log out: delete the refresh token from the server.
+
+    The deleted refresh token can no longer be used to get new access tokens. An access token
+    that was already issued stays valid until its (short) lifetime ends. A repeated logout
+    with the same token is not an error.
+    """
+    await service.logout_user(db, data.refresh_token)
+
+
+RESEND_ACTIVATION_MESSAGE = (
+    "If the account exists and is not activated, a new activation link has been sent."
+)
+
+
+@router.post("/resend-activation")
+async def resend_activation(data: ResendActivationRequest, db: DbSession) -> MessageResponse:
+    """Send a new activation link, for example if the previous one has expired.
+
+    The old link stops working and the new one is valid for 24 hours. The answer is always the
+    same, whether such an email exists, is already activated or not, so that nobody can find out
+    which emails are registered.
+    """
+    await service.resend_activation(db, data.email)
+    return MessageResponse(message=RESEND_ACTIVATION_MESSAGE)
