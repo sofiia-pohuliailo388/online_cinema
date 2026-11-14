@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from jinja2 import Environment, FileSystemLoader
 
-from notifications.models import Notification
+from src.notifications.models import Notification
 
 logger = logging.getLogger(__name__)
 
