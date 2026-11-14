@@ -9,9 +9,11 @@ from src.accounts.dependencies import CurrentUser
 from src.accounts.schemas import (
     AccessTokenResponse,
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     MessageResponse,
     RefreshTokenRequest,
     ResendActivationRequest,
+    ResetPasswordRequest,
     TokenPairResponse,
     UserLoginRequest,
     UserRead,
@@ -165,7 +167,38 @@ async def change_password(data: ChangePasswordRequest, user: CurrentUser, db: Db
     await service.change_password(db, user.id, data.old_password, data.new_password)
 
 
-@router.post(
-    "forgot-password",
-    status_code=status.HTTP_204_NO_CONTENT,
+FORGOT_PASSWORD_MESSAGE = (
+    "If the account exists and is active, a password reset link has been sent."
 )
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest, db: DbSession) -> MessageResponse:
+    """Send a password reset link to the given email.
+
+    The link is valid for 1 hour and can be used only once. The answer is always the same,
+    whether such an email exists, is activated or not, so that nobody can find out which
+    emails are registered.
+    """
+    await service.forgot_password(db, data.email)
+    return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
+
+
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorResponse,
+            "description": "Invalid or expired reset token",
+        },
+    },
+)
+async def reset_password(data: ResetPasswordRequest, db: DbSession) -> None:
+    """Set a new password with the token from the reset email.
+
+    The token can be used only once. The new password must have at least 8 characters, an
+    upper and a lower case letter, a digit and a special character. After the reset all
+    refresh tokens of the user are deleted, so the user has to log in again.
+    """
+    await service.reset_password(db, data.token, data.new_password)
