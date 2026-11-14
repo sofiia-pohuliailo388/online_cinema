@@ -16,8 +16,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from cart.models import CartItem
-from orders.models import OrderItem, Order, StatusEnum
+from src.cart.models import CartItem
+from src.orders.models import OrderItem, Order, StatusEnum
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.pagination import PaginationParams, paginate
 from src.movies.models import Genre, Movie, Star, Director, Certification
