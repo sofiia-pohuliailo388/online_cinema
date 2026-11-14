@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.interactions.models import MovieReaction
+from src.movies.lookups import ensure_movie_exists
 
 
 async def toggle_movie_reaction(
@@ -13,6 +14,8 @@ async def toggle_movie_reaction(
     is_like: bool,
 ) -> MovieReaction | None:
     """Create, change, or remove a movie reaction."""
+
+    await ensure_movie_exists(db, movie_id)
 
     stmt = select(MovieReaction).where(
         MovieReaction.user_id == user_id,
