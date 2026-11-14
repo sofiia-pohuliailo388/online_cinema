@@ -16,6 +16,7 @@ from src.accounts.schemas import (
     MessageResponse,
     ChangePasswordRequest,
     ResetPasswordRequest,
+    ForgotPasswordRequest,
 )
 
 

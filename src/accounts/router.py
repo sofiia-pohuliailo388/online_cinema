@@ -163,3 +163,9 @@ async def change_password(data: ChangePasswordRequest, user: CurrentUser, db: Db
     a digit and a special character. After the change the user logs in with the new password.
     """
     await service.change_password(db, user.id, data.old_password, data.new_password)
+
+
+@router.post(
+    "forgot-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
