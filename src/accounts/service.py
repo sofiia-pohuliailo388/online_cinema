@@ -289,3 +289,30 @@ async def resend_activation(db: AsyncSession, email: str) -> None:
     await db.commit()
 
     _send_activation_email(user.email, activation_token.token)
+
+
+async def change_password(
+    db: AsyncSession, user_id: int, old_password: str, new_password: str
+) -> None:
+    """Change the password of a user who knows the old one.
+
+    The strength of the new password is checked by the request schema, not here.
+
+    Args:
+        db: Database session.
+        user_id: Id of the authenticated user.
+        old_password: Current plain-text password.
+        new_password: New plain-text password, already validated for strength.
+
+    Raises:
+        UnauthorizedError: If the user does not exist.
+        BadRequestError: If the old password is wrong.
+    """
+    user = await get_user_by_id(db, user_id)
+    if user is None:
+        raise UnauthorizedError("User not found")
+    if not verify_password(old_password, user.hashed_password):
+        raise BadRequestError("Old password is incorrect")
+
+    user.hashed_password = hash_password(new_password)
+    await db.commit()

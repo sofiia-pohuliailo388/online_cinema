@@ -1,8 +1,22 @@
 """Pydantic schemas of the accounts domain (request and response bodies)."""
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from typing import Annotated
+
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from src.accounts.security import validate_password_strength
+
+# A password that passed the strength check: used on registration, password change and reset.
+StrongPassword = Annotated[
+    str,
+    AfterValidator(validate_password_strength),
+    Field(
+        description=(
+            "At least 8 characters: upper and lower case letter, digit and special character."
+        ),
+        examples=["Str0ng!Pass"],
+    ),
+]
 
 
 class EmailMixin(BaseModel):
@@ -23,18 +37,7 @@ class EmailMixin(BaseModel):
 class UserRegisterRequest(EmailMixin):
     """Body of the registration request."""
 
-    password: str = Field(
-        description=(
-            "At least 8 characters: upper and lower case letter, digit and special character."
-        ),
-        examples=["Str0ng!Pass"],
-    )
-
-    @field_validator("password")
-    @classmethod
-    def check_password_strength(cls, value: str) -> str:
-        """Reject weak passwords (the response will be 422 with the reason)."""
-        return validate_password_strength(value)
+    password: StrongPassword
 
 
 class UserLoginRequest(EmailMixin):
@@ -86,3 +89,13 @@ class MessageResponse(BaseModel):
         description="Human-readable result of the request.",
         examples=["If the account exists and is not activated, a new link has been sent."],
     )
+
+
+class ChangePasswordRequest(BaseModel):
+    """Body of the ``/change-password`` request."""
+
+    old_password: str = Field(
+        description="Current password of the account. Its strength is not checked.",
+        examples=["0ldStr0ng!Pass"],
+    )
+    new_password: StrongPassword
