@@ -21,7 +21,7 @@ async def test_get_cart_endpoint(client, login_as, db_session, movie, test_user)
     login_as(user_id=test_user.id)
     await add_movie_in_cart(db_session, movie.id, test_user.id)
 
-    response = await client.get("/api/v1/cart/")
+    response = await client.get("/api/v1/cart")
 
     assert response.status_code == 200
     assert len(response.json()["cart_items"]) == 1
@@ -36,7 +36,7 @@ async def test_delete_movie_endpoint(
     await add_movie_in_cart(db_session, movie.id, test_user.id)
 
     response = await client.delete(
-        f"/api/v1/cart/items/{movie.id}/"
+        f"/api/v1/cart/items/{movie.id}"
     )
 
     assert response.status_code == 204
@@ -49,7 +49,7 @@ async def test_clear_cart_endpoint(
     login_as(user_id=test_user.id)
     await add_movie_in_cart(db_session, movie.id, test_user.id)
 
-    response = await client.delete("/api/v1/cart/")
+    response = await client.delete("/api/v1/cart")
 
     assert response.status_code == 204
 
@@ -101,7 +101,7 @@ async def test_add_movie_invalid_body(client, login_as, test_user):
 async def test_get_nonexistent_cart_endpoint(client, login_as, test_user):
     login_as(user_id=test_user.id)
 
-    response = await client.get("/api/v1/cart/")
+    response = await client.get("/api/v1/cart")
 
     assert response.status_code == 404
 
@@ -113,7 +113,7 @@ async def test_delete_nonexistent_movie_endpoint(
     login_as(user_id=test_user.id)
 
     response = await client.delete(
-        f"/api/v1/cart/items/{movie.id}/"
+        f"/api/v1/cart/items/{movie.id}"
     )
 
     assert response.status_code == 404
@@ -123,6 +123,6 @@ async def test_delete_nonexistent_movie_endpoint(
 async def test_clear_nonexistent_cart_endpoint(client, login_as, test_user):
     login_as(user_id=test_user.id)
 
-    response = await client.delete("/api/v1/cart/")
+    response = await client.delete("/api/v1/cart")
 
     assert response.status_code == 404

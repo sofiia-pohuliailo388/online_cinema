@@ -6,12 +6,11 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from cart.models import Cart, CartItem
-from cart.service import get_cart_with_items
-from core.exceptions import NotFoundError, ConflictError
-from core.pagination import PaginationParams, paginate
-from movies.models import Movie
-from orders.models import Order, OrderItem, StatusEnum
+from src.cart.models import Cart, CartItem
+from src.core.exceptions import NotFoundError, ConflictError
+from src.core.pagination import PaginationParams, paginate
+from src.movies.models import Movie
+from src.orders.models import Order, OrderItem, StatusEnum
 
 
 async def is_movie_purchased(db: AsyncSession, user_id: int, movie_id: int) -> bool:
@@ -113,7 +112,11 @@ async def create_order(db: AsyncSession, user_id: int) -> dict:
         ConflictError: If the cart is empty, all movies are purchased,
             or selected movies exist in pending orders.
     """
-    cart = await get_cart_with_items(db, user_id)
+    cart = await db.scalar(
+        select(Cart)
+        .where(Cart.user_id == user_id)
+        .options(selectinload(Cart.cart_items))
+    )
     if cart is None:
         raise NotFoundError("Cart is not found")
 

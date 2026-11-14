@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
-from orders.models import StatusEnum
+from src.orders.models import StatusEnum
 
 
 class OrderItemReadSchema(BaseModel):

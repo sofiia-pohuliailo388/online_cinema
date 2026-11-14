@@ -3,12 +3,12 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends
 
-from accounts.dependencies import CurrentUser, AdminUser
-from core.database import DbSession
-from core.pagination import PaginationParams, Page
-from orders.models import StatusEnum
-from orders.schemas import CreatedResponseSchema, OrderReadSchema
-from orders.service import (
+from src.accounts.dependencies import CurrentUser, AdminUser
+from src.core.database import DbSession
+from src.core.pagination import PaginationParams, Page
+from src.orders.models import StatusEnum
+from src.orders.schemas import CreatedResponseSchema, OrderReadSchema
+from src.orders.service import (
     create_order,
     get_user_orders,
     get_order_by_id,
@@ -19,7 +19,7 @@ from orders.service import (
 router = APIRouter(tags=["Order"])
 
 
-@router.post("/orders/", status_code=201, response_model=CreatedResponseSchema)
+@router.post("/orders", status_code=201, response_model=CreatedResponseSchema)
 async def create_order_endpoint(
         db: DbSession,
         user: CurrentUser,
@@ -29,7 +29,7 @@ async def create_order_endpoint(
     return CreatedResponseSchema.model_validate(order)
 
 
-@router.get("/users/me/orders/", status_code=200, response_model=Page[OrderReadSchema])
+@router.get("/users/me/orders", status_code=200, response_model=Page[OrderReadSchema])
 async def get_list_own_orders(
         db: DbSession,
         user: CurrentUser,
@@ -46,21 +46,21 @@ async def get_list_own_orders(
     return Page.create(items=items, total=total, params=pagination)
 
 
-@router.get("/orders/{order_id}/", status_code=200, response_model=OrderReadSchema)
+@router.get("/orders/{order_id}", status_code=200, response_model=OrderReadSchema)
 async def get_own_order_by_id(db: DbSession, user: CurrentUser, order_id: int) -> OrderReadSchema:
     """Retrieve an order belonging to the authenticated user."""
     order = await get_order_by_id(db, user_id=user.id, order_id=order_id)
     return OrderReadSchema.model_validate(order)
 
 
-@router.post("/orders/{order_id}/cancel/", status_code=200, response_model=OrderReadSchema)
+@router.post("/orders/{order_id}/cancel", status_code=200, response_model=OrderReadSchema)
 async def cancel_own_order(db: DbSession, user: CurrentUser, order_id: int) -> OrderReadSchema:
     """Cancel a pending order belonging to the authenticated user."""
     order = await cancel_order(db, user_id=user.id, order_id=order_id)
     return OrderReadSchema.model_validate(order)
 
 
-@router.get("/orders/", status_code=200, response_model=Page[OrderReadSchema])
+@router.get("/orders", status_code=200, response_model=Page[OrderReadSchema])
 async def get_all_orders_for_admin(
         db: DbSession,
         admin: AdminUser,
