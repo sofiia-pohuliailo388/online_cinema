@@ -18,27 +18,28 @@ PASSWORD = "Str0ng!Pass"
 
 
 async def test_login_user_returns_access_token_with_agreed_payload(
-    db_session: AsyncSession, create_user: CreateUser
+    db_session: AsyncSession,
+    create_user: CreateUser,
 ) -> None:
     created = await create_user(UserGroupEnum.MODERATOR, password=PASSWORD)
 
-    tokens = await login_user(db_session, "user@test.com", PASSWORD)
+    access_token, _ = await login_user(db_session, "user@test.com", PASSWORD)
 
-    payload = decode_token(tokens.access_token)
+    payload = decode_token(access_token)
     assert payload["user_id"] == created.id
     assert payload["group"] == "MODERATOR"
-    assert tokens.token_type == "bearer"
 
 
 async def test_login_user_stores_refresh_token_in_db(
-    db_session: AsyncSession, create_user: CreateUser
+    db_session: AsyncSession,
+    create_user: CreateUser,
 ) -> None:
     created = await create_user(password=PASSWORD)
 
-    tokens = await login_user(db_session, "user@test.com", PASSWORD)
+    _, refresh_token = await login_user(db_session, "user@test.com", PASSWORD)
 
     stored = await db_session.scalar(
-        select(RefreshToken).where(RefreshToken.token == tokens.refresh_token)
+        select(RefreshToken).where(RefreshToken.token == refresh_token)
     )
     assert stored is not None
     assert stored.user_id == created.id
@@ -48,14 +49,15 @@ async def test_login_user_stores_refresh_token_in_db(
 
 
 async def test_login_user_allows_several_sessions(
-    db_session: AsyncSession, create_user: CreateUser
+    db_session: AsyncSession,
+    create_user: CreateUser,
 ) -> None:
     await create_user(password=PASSWORD)
 
-    first = await login_user(db_session, "user@test.com", PASSWORD)
-    second = await login_user(db_session, "user@test.com", PASSWORD)
+    _, first = await login_user(db_session, "user@test.com", PASSWORD)
+    _, second = await login_user(db_session, "user@test.com", PASSWORD)
 
-    assert first.refresh_token != second.refresh_token
+    assert first != second
     stored = (await db_session.scalars(select(RefreshToken))).all()
     assert len(stored) == 2
 
@@ -66,7 +68,10 @@ async def test_login_user_allows_several_sessions(
     ids=["wrong_password", "unknown_email"],
 )
 async def test_login_user_rejects_bad_credentials(
-    db_session: AsyncSession, create_user: CreateUser, email: str, password: str
+    db_session: AsyncSession,
+    create_user: CreateUser,
+    email: str,
+    password: str,
 ) -> None:
     await create_user(password=PASSWORD)
 
@@ -77,7 +82,8 @@ async def test_login_user_rejects_bad_credentials(
 
 
 async def test_login_user_rejects_inactive_account(
-    db_session: AsyncSession, create_user: CreateUser
+    db_session: AsyncSession,
+    create_user: CreateUser,
 ) -> None:
     await create_user(is_active=False, password=PASSWORD)
 
@@ -88,7 +94,8 @@ async def test_login_user_rejects_inactive_account(
 
 
 async def test_login_user_does_not_reveal_inactive_account_to_wrong_password(
-    db_session: AsyncSession, create_user: CreateUser
+    db_session: AsyncSession,
+    create_user: CreateUser,
 ) -> None:
     await create_user(is_active=False, password=PASSWORD)
 

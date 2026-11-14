@@ -200,3 +200,111 @@ async def test_login_without_password_returns_422(client: AsyncClient) -> None:
     response = await client.post(LOGIN_URL, json={"email": "user@example.com"})
 
     assert response.status_code == 422
+
+
+REFRESH_URL = "/api/v1/accounts/refresh"
+LOGOUT_URL = "/api/v1/accounts/logout"
+
+
+async def login_tokens(client: AsyncClient, sent_emails: list[dict[str, Any]]) -> dict[str, str]:
+    await register_and_activate(client, sent_emails)
+    response = await client.post(LOGIN_URL, json=VALID_BODY)
+    return response.json()
+
+
+async def test_refresh_returns_new_access_token(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    tokens = await login_tokens(client, sent_emails)
+
+    response = await client.post(REFRESH_URL, json={"refresh_token": tokens["refresh_token"]})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"access_token", "token_type"}
+    assert decode_token(body["access_token"])["group"] == "USER"
+
+
+async def test_refresh_with_unknown_token_returns_401(client: AsyncClient) -> None:
+    response = await client.post(REFRESH_URL, json={"refresh_token": "unknown"})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid or expired refresh token"}
+
+
+async def test_refresh_without_body_returns_422(client: AsyncClient) -> None:
+    response = await client.post(REFRESH_URL, json={})
+
+    assert response.status_code == 422
+
+
+async def test_logout_revokes_refresh_token(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    tokens = await login_tokens(client, sent_emails)
+    body = {"refresh_token": tokens["refresh_token"]}
+
+    response = await client.post(LOGOUT_URL, json=body)
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert (await client.post(REFRESH_URL, json=body)).status_code == 401
+
+
+async def test_repeated_logout_is_not_an_error(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    tokens = await login_tokens(client, sent_emails)
+    body = {"refresh_token": tokens["refresh_token"]}
+
+    assert (await client.post(LOGOUT_URL, json=body)).status_code == 204
+    assert (await client.post(LOGOUT_URL, json=body)).status_code == 204
+
+
+RESEND_URL = "/api/v1/accounts/resend-activation"
+RESEND_MESSAGE = "If the account exists and is not activated, a new activation link has been sent."
+
+
+async def test_resend_activation_sends_new_working_link(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    await client.post(REGISTER_URL, json=VALID_BODY)
+    old_token = sent_emails[0]["context"]["link"].split("token=")[1]
+
+    response = await client.post(RESEND_URL, json={"email": VALID_BODY["email"]})
+
+    assert response.status_code == 200
+    assert response.json() == {"message": RESEND_MESSAGE}
+    assert len(sent_emails) == 2
+    new_token = sent_emails[1]["context"]["link"].split("token=")[1]
+    assert new_token != old_token
+    assert (await client.get(ACTIVATE_URL, params={"token": old_token})).status_code == 400
+    assert (await client.get(ACTIVATE_URL, params={"token": new_token})).status_code == 200
+
+
+async def test_resend_activation_answer_is_the_same_for_unknown_email(
+    client: AsyncClient, sent_emails: list[dict[str, Any]]
+) -> None:
+    response = await client.post(RESEND_URL, json={"email": "nobody@example.com"})
+
+    assert response.status_code == 200
+    assert response.json() == {"message": RESEND_MESSAGE}
+    assert sent_emails == []
+
+
+async def test_resend_activation_answer_is_the_same_for_active_account(
+    client: AsyncClient, user_group: UserGroup, sent_emails: list[dict[str, Any]]
+) -> None:
+    await register_and_activate(client, sent_emails)
+
+    response = await client.post(RESEND_URL, json={"email": VALID_BODY["email"]})
+
+    assert response.status_code == 200
+    assert response.json() == {"message": RESEND_MESSAGE}
+    assert len(sent_emails) == 1  # only the registration email
+
+
+async def test_resend_activation_rejects_invalid_email(client: AsyncClient) -> None:
+    response = await client.post(RESEND_URL, json={"email": "not-an-email"})
+
+    assert response.status_code == 422
