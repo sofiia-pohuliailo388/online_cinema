@@ -9,7 +9,6 @@ from sqlalchemy.orm import selectinload
 
 from src.accounts.enums import UserGroupEnum
 from src.accounts.models import User, UserGroup, ActivationToken, RefreshToken
-from src.accounts.schemas import TokenPairResponse
 from src.accounts.security import (
     hash_password,
     generate_token,
@@ -165,7 +164,7 @@ async def activate_user(db: AsyncSession, token: str) -> User:
     return user
 
 
-async def login_user(db: AsyncSession, email: str, password: str) -> TokenPairResponse:
+async def login_user(db: AsyncSession, email: str, password: str) -> tuple[str, str]:
     """Check the credentials and issue a pair of tokens.
 
     The access token is a JWT. The refresh token is a random string stored in the DB,
@@ -177,7 +176,7 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenPairRe
         password: Plain-text password.
 
     Returns:
-        The access and refresh tokens.
+        A tuple ``(access_token, refresh_token)``.
 
     Raises:
         UnauthorizedError: If the email is unknown or the password is wrong
@@ -204,7 +203,7 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenPairRe
     )
     await db.commit()
 
-    return TokenPairResponse(access_token=access_token, refresh_token=refresh_token)
+    return access_token, refresh_token
 
 
 async def refresh_access_token(db: AsyncSession, refresh_token: str) -> str:

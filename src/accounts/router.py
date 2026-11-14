@@ -82,7 +82,8 @@ async def login(data: UserLoginRequest, db: DbSession) -> TokenPairResponse:
     the server (a user can have several, one per device) and is used to get a new access token.
     The email is case-insensitive. A wrong email and a wrong password give the same error.
     """
-    return await service.login_user(db, data.email, data.password)
+    access_token, refresh_token = await service.login_user(db, data.email, data.password)
+    return TokenPairResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post(
