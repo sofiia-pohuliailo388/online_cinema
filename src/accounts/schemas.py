@@ -99,3 +99,17 @@ class ChangePasswordRequest(BaseModel):
         examples=["0ldStr0ng!Pass"],
     )
     new_password: StrongPassword
+
+
+class ForgotPasswordRequest(EmailMixin):
+    """Body of the ``/forgot-password`` request."""
+
+
+class ResetPasswordRequest(BaseModel):
+    """Body of the ``/reset-password`` request."""
+
+    token: str = Field(
+        description="Password reset token from the email link.",
+        examples=["kJ3xQ9vR2mT7wYpL0aZ8nC5dF1gH6sBu4eIoXjKq-Vw"],
+    )
+    new_password: StrongPassword
