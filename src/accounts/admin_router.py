@@ -9,16 +9,16 @@ from src.accounts.dependencies import AdminUser
 from src.accounts.enums import UserGroupEnum
 from src.accounts.user_schemas import AdminUserRead, ChangeGroupRequest
 from src.core.database import DbSession
-from src.core.exceptions import ErrorResponse
+from src.core.exceptions import ErrorResponse, Responses
 from src.core.pagination import Page, PaginationParams
 
 router = APIRouter(prefix="/admin/users", tags=["admin"])
 
-ADMIN_ONLY = {
+ADMIN_ONLY: Responses = {
     401: {"model": ErrorResponse, "description": "Not authenticated"},
     403: {"model": ErrorResponse, "description": "Admin only"},
 }
-NOT_FOUND = {404: {"model": ErrorResponse, "description": "User not found"}}
+NOT_FOUND: Responses = {404: {"model": ErrorResponse, "description": "User not found"}}
 
 
 @router.get("", responses=ADMIN_ONLY)

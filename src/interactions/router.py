@@ -48,7 +48,7 @@ async def toggle_reaction(
         movie_id=data.movie_id,
         is_like=data.is_like,
     )
-    return reaction
+    return MovieReactionRead.model_validate(reaction) if reaction else None
 
 
 @router.post(
@@ -67,12 +67,13 @@ async def rate_movie(
     user: CurrentUser,
 ) -> RatingRead:
     """Create or update the current user's movie rating."""
-    return await service.create_rating(
+    rating = await service.create_rating(
         db=db,
         user_id=user.id,
         movie_id=data.movie_id,
         score=data.score,
     )
+    return RatingRead.model_validate(rating)
 
 
 @router.get(
@@ -89,7 +90,8 @@ async def get_movie_comments(
     db: DbSession,
 ) -> list[CommentRead]:
     """Get comments for a movie."""
-    return await service.list_comments(db=db, movie_id=movie_id)
+    comments = await service.list_comments(db=db, movie_id=movie_id)
+    return [CommentRead.model_validate(comment) for comment in comments]
 
 
 @router.post(
@@ -110,13 +112,14 @@ async def add_comment(
     user: CurrentUser,
 ) -> CommentRead:
     """Create a comment or a reply to another comment."""
-    return await service.create_comment(
+    comment = await service.create_comment(
         db=db,
         user_id=user.id,
         movie_id=data.movie_id,
         text=data.text,
         parent_id=data.parent_id,
     )
+    return CommentRead.model_validate(comment)
 
 
 @router.post(
@@ -135,11 +138,12 @@ async def toggle_comment_like(
     user: CurrentUser,
 ) -> CommentLikeRead | None:
     """Add or remove the current user's like on a comment."""
-    return await service.like_comment(
+    like = await service.like_comment(
         db=db,
         user_id=user.id,
         comment_id=comment_id,
     )
+    return CommentLikeRead.model_validate(like) if like else None
 
 
 @router.post(
@@ -158,11 +162,12 @@ async def add_movie_to_favorites(
     user: CurrentUser,
 ) -> FavoriteRead:
     """Add a movie to the current user's favorites."""
-    return await service.add_favorite(
+    favorite = await service.add_favorite(
         db=db,
         user_id=user.id,
         movie_id=movie_id,
     )
+    return FavoriteRead.model_validate(favorite)
 
 
 @router.delete(

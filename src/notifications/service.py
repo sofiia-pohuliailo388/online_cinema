@@ -12,10 +12,11 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -129,10 +130,10 @@ async def mark_as_read(db: AsyncSession, user_id: int, notification_id: int) -> 
 
 async def mark_all_as_read(db: AsyncSession, user_id: int) -> int:
     """Mark all of the user's notifications as read. Returns how many were changed."""
-    result = await db.execute(
+    result = cast(CursorResult[Any], await db.execute(
         update(Notification)
         .where(Notification.user_id == user_id, Notification.is_read.is_(False))
         .values(is_read=True)
-    )
+    ))
     await db.commit()
     return int(result.rowcount or 0)

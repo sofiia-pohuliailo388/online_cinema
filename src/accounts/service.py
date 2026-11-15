@@ -215,6 +215,8 @@ async def activate_user(db: AsyncSession, token: str) -> User:
         raise BadRequestError("Activation token has expired")
 
     user = await db.scalar(select(User).where(User.id == activation_token.user_id))
+    if user is None:
+        raise BadRequestError("Invalid activation token")
 
     user.is_active = True
     await db.delete(activation_token)
@@ -416,6 +418,8 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
 
     user_id = reset_token.user_id
     user = await db.get(User, user_id)
+    if user is None:
+        raise BadRequestError("Invalid or expired reset token")
     user.hashed_password = hash_password(new_password)
 
     await db.delete(reset_token)

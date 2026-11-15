@@ -11,9 +11,16 @@ Usage in a service::
         raise NotFoundError(f"Genre {genre_id} not found")
 """
 
+from typing import Any
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+
+# Type of the ``responses=`` argument of FastAPI routes, e.g.
+# ``NOT_FOUND: Responses = {404: {"model": ErrorResponse, "description": "Not found"}}``
+Responses = dict[int | str, dict[str, Any]]
 
 
 class ErrorResponse(BaseModel):

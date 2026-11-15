@@ -14,11 +14,12 @@ Layer rules (same for every domain):
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status, Response
+from fastapi import APIRouter, Depends, Response, status
+from fastapi.responses import JSONResponse
 
 from src.accounts.dependencies import ModeratorUser
 from src.core.database import DbSession
-from src.core.exceptions import ErrorResponse
+from src.core.exceptions import ErrorResponse, Responses
 from src.core.pagination import Page, PaginationParams
 from src.movies import service
 from src.movies.filters import MovieFilterParams
@@ -42,9 +43,9 @@ from src.movies.schemas import (
 
 router = APIRouter(tags=["movies"])
 
-NOT_FOUND = {404: {"model": ErrorResponse, "description": "Not found"}}
-CONFLICT = {409: {"model": ErrorResponse, "description": "Already exists"}}
-MODERATOR_ONLY = {
+NOT_FOUND: Responses = {404: {"model": ErrorResponse, "description": "Not found"}}
+CONFLICT: Responses = {409: {"model": ErrorResponse, "description": "Already exists"}}
+MODERATOR_ONLY: Responses = {
     401: {"model": ErrorResponse, "description": "Not authenticated"},
     403: {"model": ErrorResponse, "description": "Moderator or admin only"},
 }
@@ -163,13 +164,14 @@ async def update_movie(
     "/movies/{movie_id}",
     responses={**MODERATOR_ONLY, **NOT_FOUND, **CONFLICT},
 )
-async def delete_movie(
-    movie_id: int, db: DbSession, _: ModeratorUser
-) -> dict | None:
-    """Delete a movie. Moderator or admin only."""
+async def delete_movie(movie_id: int, db: DbSession, _: ModeratorUser) -> Response:
+    """Delete a movie. Moderator or admin only.
+
+    Returns 204, or 200 with ``{"warning": ...}`` if the movie was in some users' carts.
+    """
     result = await service.delete_movie(db, movie_id)
     if result:
-        return result
+        return JSONResponse(content=result)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

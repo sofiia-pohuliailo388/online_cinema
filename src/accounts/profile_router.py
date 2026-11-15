@@ -8,14 +8,18 @@ from src.accounts import profile_service
 from src.accounts.dependencies import CurrentUser
 from src.accounts.user_schemas import ProfileRead, ProfileUpdate
 from src.core.database import DbSession
-from src.core.exceptions import ErrorResponse
+from src.core.exceptions import ErrorResponse, Responses
 from src.storage import s3
 
 router = APIRouter(prefix="/users/me/profile", tags=["profile"])
 
-UNAUTHORIZED = {401: {"model": ErrorResponse, "description": "Not authenticated"}}
-BAD_AVATAR = {400: {"model": ErrorResponse, "description": "Not an image, empty or > 2 MB"}}
-STORAGE_DOWN = {503: {"model": ErrorResponse, "description": "File storage is unavailable"}}
+UNAUTHORIZED: Responses = {401: {"model": ErrorResponse, "description": "Not authenticated"}}
+BAD_AVATAR: Responses = {
+    400: {"model": ErrorResponse, "description": "Not an image, empty or > 2 MB"}
+}
+STORAGE_DOWN: Responses = {
+    503: {"model": ErrorResponse, "description": "File storage is unavailable"}
+}
 
 
 def _to_read(profile: Any) -> ProfileRead:

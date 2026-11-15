@@ -22,6 +22,21 @@ jobs:
       - name: Run flake8
         run: flake8 .
 
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Poetry
+        run: pip install poetry
+      - name: Install dependencies
+        run: poetry install --no-interaction
+      - name: Run mypy
+        run: poetry run mypy src
+
   tests:
     name: tests
     runs-on: ubuntu-latest
@@ -36,7 +51,7 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
       - name: Run tests
-        run: poetry run pytest --cov=src --cov-report=term-missing
+        run: poetry run pytest --cov=src --cov-report=term-missing --cov-fail-under=80
 
   migrations:
     name: migrations
