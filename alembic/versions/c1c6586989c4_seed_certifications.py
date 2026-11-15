@@ -19,23 +19,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    certifications_table = sa.table(
-        'certifications',
-        sa.column('id', sa.Integer()),
-        sa.column('name', sa.String())
-    )
-
-    op.bulk_insert(
-        certifications_table,
-        [
-            {"id": 1, "name": "G"},
-            {"id": 2, "name": "PG"},
-            {"id": 3, "name": "PG-13"},
-            {"id": 4, "name": "R"},
-            {"id": 5, "name": "NC-17"},
-        ]
-    )
-
+    op.execute("""
+        INSERT INTO certifications (id, name) VALUES 
+        (1, 'G'),
+        (2, 'PG'),
+        (3, 'PG-13'),
+        (4, 'R'),
+        (5, 'NC-17')
+        ON CONFLICT (name) DO UPDATE 
+        SET id = EXCLUDED.id;
+    """)
 
 def downgrade() -> None:
-    op.execute("DELETE FROM certifications WHERE name IN ('G', 'PG', 'PG-13', 'R', 'NC-17')")
+    op.execute("DELETE FROM certifications WHERE id IN (1, 2, 3, 4, 5)")
