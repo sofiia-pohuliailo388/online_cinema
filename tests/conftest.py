@@ -1,6 +1,7 @@
 """Shared test fixtures (owner: P1).
 
 * Tests run against in-memory SQLite: no Docker or Postgres needed.
+* Celery tasks run inline (no Redis) and real emails are never sent.
 * ``client``   - async HTTP client bound to the app with a fresh empty DB per test.
 * ``db_session`` - the same session, for preparing data directly.
 * ``login_as`` - pretend a user of a given group is logged in (no real JWT needed)::
@@ -25,8 +26,33 @@ from src.accounts.enums import UserGroupEnum
 from src.core.database import get_db
 from src.core.models import Base
 from src.main import app
+from src.notifications import service as notifications_service
+from src.tasks.celery_app import celery_app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite://"
+
+# Celery tasks run inline in tests: no Redis or worker needed.
+celery_app.conf.task_always_eager = True
+
+
+@pytest.fixture(autouse=True)
+def no_real_emails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Real emails are never sent from tests: SMTP is replaced with a stub that does nothing."""
+
+    class _NoSMTP:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def __enter__(self) -> "_NoSMTP":
+            return self
+
+        def __exit__(self, *args: Any) -> None:
+            return None
+
+        def sendmail(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+    monkeypatch.setattr(notifications_service.smtplib, "SMTP", _NoSMTP)
 
 
 @pytest.fixture

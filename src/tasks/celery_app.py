@@ -1,11 +1,26 @@
+"""Celery application and celery-beat schedule (owner: P3).
+
+Worker: ``celery -A src.tasks.celery_app worker -l info``
+Beat:   ``celery -A src.tasks.celery_app beat -l info``
+"""
+
 from celery import Celery
 from celery.schedules import crontab
 
+from src.core.config import settings
+
 celery_app = Celery(
-    "cinema_tasks", broker="redis://localhost:6379/0", backend="redis://localhost:6379/0"
+    "cinema_tasks",
+    broker=settings.REDIS_URL,
+    backend=settings.REDIS_URL,
+    include=["src.tasks.service"],
 )
 
-celery_app.autodiscover_tasks(["src.tasks"])
+celery_app.conf.update(
+    timezone="UTC",
+    task_serializer="json",
+    accept_content=["json"],
+)
 
 celery_app.conf.beat_schedule = {
     "cleanup-expired-tokens-hourly": {
