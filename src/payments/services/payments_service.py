@@ -216,7 +216,7 @@ async def refund_payment(db: AsyncSession, payment_id: int) -> Payment:
     payment.status = PaymentStatus.refunded
     payment.order.status = StatusEnum.CANCELED
     await db.commit()
-    logger.info("Payment %s refunded, order %s marked refunded", payment_id, payment.order_id)
+    logger.info("Payment %s refunded, order %s marked canceled", payment_id, payment.order_id)
 
     return await db.scalar(
         select(Payment)
