@@ -9,9 +9,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.accounts.service import get_user_by_id
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.pagination import PaginationParams, paginate
 from src.orders.models import Order, OrderItem, StatusEnum
+from src.notifications.service import send_email
 from src.orders.service import mark_order_paid
 from src.payments.models import Payment, PaymentItem, PaymentStatus
 from src.payments.services import stripe_client
@@ -224,3 +226,40 @@ async def refund_payment(db: AsyncSession, payment_id: int) -> Payment:
         .options(selectinload(Payment.items))
         .execution_options(populate_existing=True)
     )
+
+
+async def send_payment_confirmation(db: AsyncSession, result: PaymentResult) -> None:
+    """Email the user that the payment succeeded (spec, sections 4 and 5).
+
+    Errors are logged and never raised: a failed email must not fail the Stripe webhook.
+    """
+    try:
+        user = await get_user_by_id(db, result.user_id)
+        if user is None:
+            logger.error(
+                "Payment %s: user %s not found, confirmation email skipped",
+                result.payment_id,
+                result.user_id,
+            )
+            return
+
+        order_items = await db.scalars(
+            select(OrderItem)
+            .where(OrderItem.order_id == result.order_id)
+            .options(selectinload(OrderItem.movie))
+        )
+        movie_names = sorted(item.movie.name for item in order_items)
+
+        send_email(
+            to=user.email,
+            subject="Payment confirmation",
+            template="payment_success.html",
+            context={
+                "movie_title": ", ".join(movie_names),
+                "amount": f"${result.amount:.2f}",
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Failed to send payment confirmation for payment %s", result.payment_id
+        )

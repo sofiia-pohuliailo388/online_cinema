@@ -492,6 +492,17 @@ async def update_certification(
 
 
 async def delete_certification(db: AsyncSession, certification_id: int) -> None:
+    """Delete a certification that no movie uses.
+
+    Raises:
+        NotFoundError: certification does not exist.
+        ConflictError: at least one movie has this certification.
+    """
     cert = await get_certification(db, certification_id)
+    movies_count = await db.scalar(
+        select(func.count(Movie.id)).where(Movie.certification_id == certification_id)
+    )
+    if movies_count:
+        raise ConflictError("Cannot delete a certification that is used by movies")
     await db.delete(cert)
     await db.commit()
