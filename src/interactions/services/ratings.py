@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.interactions.models import Rating
+from src.movies.lookups import ensure_movie_exists
 
 
 async def create_rating(
@@ -13,6 +14,8 @@ async def create_rating(
     score: int,
 ) -> Rating:
     """Create or update a user's rating for a movie."""
+
+    await ensure_movie_exists(db, movie_id)
 
     stmt = select(Rating).where(
         Rating.user_id == user_id,

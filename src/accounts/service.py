@@ -1,29 +1,87 @@
-"""Business logic of the accounts domain (spec, section 1)."""
+"""Business logic of the accounts domain (spec, section 1): registration, tokens, passwords.
+
+Owner: P2.
+"""
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.accounts.enums import UserGroupEnum
-from src.accounts.models import User, UserGroup, ActivationToken, RefreshToken
-from src.accounts.schemas import TokenPairResponse
+from src.accounts.models import (
+    ActivationToken,
+    PasswordResetToken,
+    RefreshToken,
+    User,
+    UserGroup,
+)
 from src.accounts.security import (
-    hash_password,
-    generate_token,
-    verify_password,
+    DUMMY_PASSWORD_HASH,
     create_access_token,
+    generate_token,
+    hash_password,
+    verify_password,
 )
 from src.core.config import settings
 from src.core.exceptions import (
-    ConflictError,
     BadRequestError,
-    UnauthorizedError,
+    ConflictError,
     PermissionDeniedError,
+    UnauthorizedError,
 )
 from src.notifications.service import send_email
+
+PASSWORD_RESET_TOKEN_TTL = timedelta(hours=1)
+
+
+def _is_expired(expires_at: datetime) -> bool:
+    """Tell whether an expiration time has already passed.
+
+    Args:
+        expires_at: Expiration time of a token (naive values are treated as UTC).
+
+    Returns:
+        ``True`` if the time is in the past.
+    """
+    if expires_at.tzinfo is None:
+        # SQLite returns naive datetimes, Postgres aware ones.
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at < datetime.now(timezone.utc)
+
+
+def _new_activation_token(user_id: int) -> ActivationToken:
+    """Build a new activation token valid for ``ACTIVATION_TOKEN_TTL_HOURS`` hours.
+
+    Args:
+        user_id: Id of the user the token is for.
+
+    Returns:
+        A new token, not saved to the DB yet.
+    """
+    return ActivationToken(
+        user_id=user_id,
+        token=generate_token(),
+        expires_at=datetime.now(timezone.utc)
+        + timedelta(hours=settings.ACTIVATION_TOKEN_TTL_HOURS),
+    )
+
+
+def _send_activation_email(email: str, token: str) -> None:
+    """Send the email with the activation link.
+
+    Args:
+        email: Address of the user.
+        token: Activation token to put into the link.
+    """
+    send_email(
+        to=email,
+        subject="Activation link",
+        template="activation.html",
+        context={"link": build_activation_link(token)},
+    )
 
 
 async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
@@ -42,6 +100,22 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
+    """Return a user by email with the group already loaded.
+
+    Args:
+        db: Database session.
+        email: Email of the user (already normalized to lower case).
+
+    Returns:
+        The user (with ``user.group`` loaded), or ``None`` if there is no such user.
+    """
+    result = await db.execute(
+        select(User).options(selectinload(User.group)).where(User.email == email),
+    )
+    return result.scalar_one_or_none()
+
+
 def build_activation_link(token: str) -> str:
     """Build the link from the activation email.
 
@@ -52,6 +126,18 @@ def build_activation_link(token: str) -> str:
         Absolute URL of the activation endpoint with the token as a query parameter.
     """
     return f"{settings.APP_BASE_URL}/api/v1/accounts/activate?token={token}"
+
+
+def build_password_reset_link(token: str) -> str:
+    """Build the link from the password reset email.
+
+    Args:
+        token: Password reset token of the user.
+
+    Returns:
+        URL of the reset page with the token as a query parameter.
+    """
+    return f"{settings.APP_BASE_URL}/reset-password?token={token}"
 
 
 async def register_user(db: AsyncSession, email: str, password: str) -> User:
@@ -72,7 +158,7 @@ async def register_user(db: AsyncSession, email: str, password: str) -> User:
         ConflictError: If a user with this email already exists.
         RuntimeError: If the default ``USER`` group is missing (migrations were not applied).
     """
-    existing_user = await db.scalar(select(User).where(User.email == email))
+    existing_user = await get_user_by_email(db, email)
     if existing_user is not None:
         raise ConflictError("User with this email already exists")
 
@@ -88,12 +174,7 @@ async def register_user(db: AsyncSession, email: str, password: str) -> User:
     db.add(user)
     await db.flush()
 
-    activation_token = ActivationToken(
-        user_id=user.id,
-        token=generate_token(),
-        expires_at=datetime.now(timezone.utc)
-        + timedelta(hours=settings.ACTIVATION_TOKEN_TTL_HOURS),
-    )
+    activation_token = _new_activation_token(user_id=user.id)
     db.add(activation_token)
 
     try:
@@ -103,16 +184,8 @@ async def register_user(db: AsyncSession, email: str, password: str) -> User:
         await db.rollback()
         raise ConflictError("User with this email already exists") from exc
 
-    send_email(
-        to=user.email,
-        subject="Activation link",
-        template="activation.html",
-        context={
-            "link": build_activation_link(activation_token.token),
-        },
-    )
-
     await db.refresh(user)
+    _send_activation_email(user.email, activation_token.token)
 
     return user
 
@@ -133,16 +206,12 @@ async def activate_user(db: AsyncSession, token: str) -> User:
         BadRequestError: If the token does not exist or has expired.
     """
     activation_token = await db.scalar(
-        select(ActivationToken).where(ActivationToken.token == token)
+        select(ActivationToken).where(ActivationToken.token == token),
     )
     if activation_token is None:
         raise BadRequestError("Invalid activation token")
 
-    expires_at = activation_token.expires_at
-    if expires_at.tzinfo is None:
-        # SQLite returns naive datetimes, Postgres aware ones.
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < datetime.now(timezone.utc):
+    if _is_expired(activation_token.expires_at):
         raise BadRequestError("Activation token has expired")
 
     user = await db.scalar(select(User).where(User.id == activation_token.user_id))
@@ -154,7 +223,7 @@ async def activate_user(db: AsyncSession, token: str) -> User:
     return user
 
 
-async def login_user(db: AsyncSession, email: str, password: str) -> TokenPairResponse:
+async def login_user(db: AsyncSession, email: str, password: str) -> tuple[str, str]:
     """Check the credentials and issue a pair of tokens.
 
     The access token is a JWT. The refresh token is a random string stored in the DB,
@@ -166,17 +235,19 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenPairRe
         password: Plain-text password.
 
     Returns:
-        The access and refresh tokens.
+        A tuple ``(access_token, refresh_token)``.
 
     Raises:
         UnauthorizedError: If the email is unknown or the password is wrong
             (the same message for both, so that registered emails are not revealed).
         PermissionDeniedError: If the credentials are right, but the account is not activated.
     """
-    user = await db.scalar(
-        select(User).options(selectinload(User.group)).where(User.email == email)
-    )
-    if user is None or not verify_password(password, user.hashed_password):
+    user = await get_user_by_email(db, email)
+    # The password is always checked (against a dummy hash for an unknown email), so the
+    # response time does not reveal whether the email is registered.
+    password_hash = user.hashed_password if user is not None else DUMMY_PASSWORD_HASH
+    password_is_valid = verify_password(password, password_hash)
+    if user is None or not password_is_valid:
         raise UnauthorizedError("Invalid email or password")
 
     if not user.is_active:
@@ -189,8 +260,164 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenPairRe
             user_id=user.id,
             token=refresh_token,
             expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_TTL_DAYS),
-        )
+        ),
     )
     await db.commit()
 
-    return TokenPairResponse(access_token=access_token, refresh_token=refresh_token)
+    return access_token, refresh_token
+
+
+async def refresh_access_token(db: AsyncSession, refresh_token: str) -> str:
+    """Issue a new access token for a valid refresh token.
+
+    The refresh token itself is not changed: it stays valid until it expires or until logout.
+
+    Args:
+        db: Database session.
+        refresh_token: Refresh token received on login.
+
+    Returns:
+        A new JWT access token.
+
+    Raises:
+        UnauthorizedError: If the refresh token does not exist or has expired.
+        PermissionDeniedError: If the account is not active.
+    """
+    stored = await db.scalar(select(RefreshToken).where(RefreshToken.token == refresh_token))
+    if stored is None or _is_expired(stored.expires_at):
+        raise UnauthorizedError("Invalid or expired refresh token")
+
+    user = await get_user_by_id(db, stored.user_id)
+    if user is None or not user.is_active:
+        raise PermissionDeniedError("Account is not activated")
+
+    return create_access_token(user.id, user.group.name)
+
+
+async def logout_user(db: AsyncSession, refresh_token: str) -> None:
+    """Revoke a refresh token, so it can not be used to get new access tokens.
+
+    Does nothing if the token does not exist (a repeated logout is not an error).
+
+    Args:
+        db: Database session.
+        refresh_token: Refresh token to delete.
+    """
+    await db.execute(delete(RefreshToken).where(RefreshToken.token == refresh_token))
+    await db.commit()
+
+
+async def resend_activation(db: AsyncSession, email: str) -> None:
+    """Replace the activation token of a not yet activated account and send a new link.
+
+    The old token (if any, even an expired one) is deleted and a new one, valid for
+    ``ACTIVATION_TOKEN_TTL_HOURS`` hours, is created. Nothing happens if there is no such user
+    or the account is already active, so the caller can answer the same way in all cases and
+    the registered emails are not revealed.
+
+    Args:
+        db: Database session.
+        email: Email of the user (already normalized to lower case).
+    """
+    user = await get_user_by_email(db, email)
+    if user is None or user.is_active:
+        return
+
+    await db.execute(delete(ActivationToken).where(ActivationToken.user_id == user.id))
+
+    activation_token = _new_activation_token(user.id)
+    db.add(activation_token)
+    await db.commit()
+
+    _send_activation_email(user.email, activation_token.token)
+
+
+async def change_password(
+    db: AsyncSession,
+    user_id: int,
+    old_password: str,
+    new_password: str,
+) -> None:
+    """Change the password of a user who knows the old one.
+
+    The strength of the new password is checked by the request schema, not here.
+
+    Args:
+        db: Database session.
+        user_id: Id of the authenticated user.
+        old_password: Current plain-text password.
+        new_password: New plain-text password, already validated for strength.
+
+    Raises:
+        UnauthorizedError: If the user does not exist.
+        BadRequestError: If the old password is wrong.
+    """
+    user = await get_user_by_id(db, user_id)
+    if user is None:
+        raise UnauthorizedError("User not found")
+    if not verify_password(old_password, user.hashed_password):
+        raise BadRequestError("Old password is incorrect")
+
+    user.hashed_password = hash_password(new_password)
+    await db.commit()
+
+
+async def forgot_password(db: AsyncSession, email: str) -> None:
+    """Send a password reset link to an active account.
+
+    The old reset token is replaced with a new one, valid for ``PASSWORD_RESET_TOKEN_TTL``.
+    Nothing happens if there is no such user or the account is not active, so the caller can
+    answer the same way in all cases and the registered emails are not revealed.
+
+    Args:
+        db: Database session.
+        email: Email of the user (already normalized to lower case).
+    """
+    user = await get_user_by_email(db, email)
+    if user is None or not user.is_active:
+        return
+
+    await db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id))
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        token=generate_token(),
+        expires_at=datetime.now(timezone.utc) + PASSWORD_RESET_TOKEN_TTL,
+    )
+    db.add(reset_token)
+    await db.commit()
+
+    send_email(
+        to=user.email,
+        subject="Password reset",
+        template="password_reset.html",
+        context={"link": build_password_reset_link(reset_token.token)},
+    )
+
+
+async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
+    """Set a new password with the token from the reset email.
+
+    The token is deleted, so it can be used only once. All refresh tokens of the user are
+    deleted too, so nobody stays logged in with the old password.
+
+    Args:
+        db: Database session.
+        token: Password reset token from the email link.
+        new_password: New plain-text password, already validated for strength.
+
+    Raises:
+        BadRequestError: If the token does not exist or has expired.
+    """
+    reset_token = await db.scalar(
+        select(PasswordResetToken).where(PasswordResetToken.token == token),
+    )
+    if reset_token is None or _is_expired(reset_token.expires_at):
+        raise BadRequestError("Invalid or expired reset token")
+
+    user_id = reset_token.user_id
+    user = await db.get(User, user_id)
+    user.hashed_password = hash_password(new_password)
+
+    await db.delete(reset_token)
+    await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
+    await db.commit()

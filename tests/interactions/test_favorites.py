@@ -270,3 +270,72 @@ async def test_list_favorites_applies_pagination(db_session):
     assert total == 3
     assert len(result) == 2
     assert [movie.name for movie in result] == ["Movie 0", "Movie 1"]
+
+
+@pytest.mark.asyncio
+async def test_list_favorites_applies_year_filter(db_session):
+    user = await create_test_user(db_session, "year-filter@example.com")
+
+    movie1 = await create_test_movie(db_session, "Old Movie")
+    movie2 = await create_test_movie(db_session, "New Movie")
+
+    movie1.year = 2020
+    movie2.year = 2024
+
+    db_session.add_all(
+        [
+            Favorite(user_id=user.id, movie_id=movie1.id),
+            Favorite(user_id=user.id, movie_id=movie2.id),
+        ]
+    )
+    await db_session.commit()
+
+    filters = create_movie_filters()
+    filters.year_from = 2023
+
+    result, total = await list_favorites(
+        db_session,
+        user.id,
+        filters,
+        PaginationParams(page=1, per_page=20),
+    )
+
+    assert total == 1
+    assert len(result) == 1
+    assert result[0].name == "New Movie"
+
+
+@pytest.mark.asyncio
+async def test_list_favorites_applies_sorting(db_session):
+    user = await create_test_user(db_session, "sorting@example.com")
+
+    movie1 = await create_test_movie(db_session, "Batman")
+    movie2 = await create_test_movie(db_session, "Superman")
+    movie3 = await create_test_movie(db_session, "Avengers")
+
+    db_session.add_all(
+        [
+            Favorite(user_id=user.id, movie_id=movie1.id),
+            Favorite(user_id=user.id, movie_id=movie2.id),
+            Favorite(user_id=user.id, movie_id=movie3.id),
+        ]
+    )
+    await db_session.commit()
+
+    filters = create_movie_filters()
+    filters.sort_by = "name"
+    filters.sort_order = "desc"
+
+    result, total = await list_favorites(
+        db_session,
+        user.id,
+        filters,
+        PaginationParams(page=1, per_page=20),
+    )
+
+    assert total == 3
+    assert [movie.name for movie in result] == [
+        "Superman",
+        "Batman",
+        "Avengers",
+    ]
