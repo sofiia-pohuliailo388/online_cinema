@@ -38,10 +38,7 @@ async def stripe_webhook(request: Request, db: DbSession) -> dict:
             result = None
 
         if result is not None:
-            # TODO: send the payment confirmation email here via EmailSender
-            #       (use result.user_id / result.order_id / result.amount).
-            #       Email failures must be logged and must NOT fail the webhook.
-            pass
+            await service.send_payment_confirmation(db, result)
 
     return {"status": "success"}
 
