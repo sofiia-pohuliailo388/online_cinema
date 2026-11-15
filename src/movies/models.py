@@ -17,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     UniqueConstraint,
     Uuid,
+    CheckConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.core.models import Base, TimestampMixin
@@ -127,4 +128,7 @@ class Movie(Base, TimestampMixin):
         "Star", secondary=movie_stars, back_populates="movies"
     )
 
-    __table_args__ = (UniqueConstraint("name", "year", "time", name="uq_movie_name_year_time"),)
+    __table_args__ = (
+        UniqueConstraint("name", "year", "time", name="uq_movie_name_year_time"),
+        CheckConstraint("price >= 0", name="check_movie_price_not_negative"),
+    )
