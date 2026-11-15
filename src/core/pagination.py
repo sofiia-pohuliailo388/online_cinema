@@ -55,7 +55,7 @@ class Page(BaseModel, Generic[T]):
 
 
 async def paginate(
-    db: AsyncSession, stmt: Select[Any], params: PaginationParams
+    db: AsyncSession, stmt: Select, params: PaginationParams
 ) -> tuple[list[Any], int]:
     """Return one page of ``stmt`` results and the total row count."""
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())

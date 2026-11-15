@@ -7,9 +7,10 @@ so it can be tested without a running worker or Redis.
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -35,11 +36,15 @@ async def delete_expired_tokens(db: AsyncSession) -> tuple[int, int]:
         Number of deleted activation tokens and of deleted password-reset tokens.
     """
     now = datetime.now(timezone.utc)
-    activation = await db.execute(
-        delete(ActivationToken).where(ActivationToken.expires_at < now)
+    activation = cast(
+        CursorResult[Any],
+        await db.execute(delete(ActivationToken).where(ActivationToken.expires_at < now)),
     )
-    reset = await db.execute(
-        delete(PasswordResetToken).where(PasswordResetToken.expires_at < now)
+    reset = cast(
+        CursorResult[Any],
+        await db.execute(
+            delete(PasswordResetToken).where(PasswordResetToken.expires_at < now)
+        ),
     )
     await db.commit()
     return activation.rowcount, reset.rowcount

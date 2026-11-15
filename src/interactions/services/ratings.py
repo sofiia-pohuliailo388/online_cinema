@@ -44,6 +44,6 @@ async def get_average_rating(db: AsyncSession, movie_id: int) -> float | None:
     """Calculate the average rating for a movie."""
     stmt = select(func.avg(Rating.score)).where(Rating.movie_id == movie_id)
     result = await db.execute(stmt)
-    average = result.scalar_one()
+    average: float | None = result.scalar_one()
 
     return round(float(average), 2) if average is not None else None

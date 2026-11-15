@@ -9,15 +9,15 @@ from fastapi import APIRouter, Depends, Query
 
 from src.accounts.dependencies import CurrentUser
 from src.core.database import DbSession
-from src.core.exceptions import ErrorResponse
+from src.core.exceptions import ErrorResponse, Responses
 from src.core.pagination import Page, PaginationParams
 from src.notifications import service
 from src.notifications.schemas import MarkedReadRead, NotificationRead, UnreadCountRead
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
-UNAUTHORIZED = {401: {"model": ErrorResponse, "description": "Not authenticated"}}
-NOT_FOUND = {404: {"model": ErrorResponse, "description": "Notification not found"}}
+UNAUTHORIZED: Responses = {401: {"model": ErrorResponse, "description": "Not authenticated"}}
+NOT_FOUND: Responses = {404: {"model": ErrorResponse, "description": "Notification not found"}}
 
 
 @router.get("", responses=UNAUTHORIZED)

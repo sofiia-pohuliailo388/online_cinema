@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.accounts.service import get_user_by_id
-from src.core.exceptions import ConflictError, NotFoundError
+from src.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from src.core.pagination import PaginationParams, paginate
 from src.orders.models import Order, OrderItem, StatusEnum
 from src.notifications.service import send_email
@@ -77,6 +77,8 @@ async def create_checkout(db: AsyncSession, user_id: int, email: str, order_id: 
     session = await stripe_client.create_checkout_session(
         order_id=order_id, customer_email=email, line_items=line_items
     )
+    if session.url is None:
+        raise BadRequestError("Could not create a payment session")
     return session.url
 
 
@@ -220,12 +222,15 @@ async def refund_payment(db: AsyncSession, payment_id: int) -> Payment:
     await db.commit()
     logger.info("Payment %s refunded, order %s marked canceled", payment_id, payment.order_id)
 
-    return await db.scalar(
+    refreshed = await db.scalar(
         select(Payment)
         .where(Payment.id == payment_id)
         .options(selectinload(Payment.items))
         .execution_options(populate_existing=True)
     )
+    if refreshed is None:
+        raise NotFoundError(f"Payment {payment_id} is not found")
+    return refreshed
 
 
 async def send_payment_confirmation(db: AsyncSession, result: PaymentResult) -> None:
