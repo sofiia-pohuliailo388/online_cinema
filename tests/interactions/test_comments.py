@@ -72,6 +72,30 @@ async def test_create_comment_reply(mock_notify, mock_db):
     )
 
 
+@patch("src.interactions.services.comments.notify_user", new_callable=AsyncMock)
+async def test_create_own_comment_reply_does_not_notify(
+    mock_notify,
+    mock_db,
+):
+    db, result = mock_db
+    parent = SimpleNamespace(
+        id=5,
+        user_id=1,
+        movie_id=10,
+    )
+    result.scalar_one_or_none.return_value = parent
+
+    await create_comment(
+        db=db,
+        user_id=1,
+        movie_id=10,
+        text="My own reply",
+        parent_id=5,
+    )
+
+    mock_notify.assert_not_awaited()
+
+
 async def test_create_comment_parent_not_found(mock_db):
     db, result = mock_db
     result.scalar_one_or_none.return_value = None

@@ -1,5 +1,9 @@
+
+"""FastAPI application factory."""
+
 from fastapi import FastAPI
 
+import src.models  # noqa: F401
 from src.accounts.router import router as accounts_router
 from src.cart.router import router as cart_router
 from src.core.docs import setup_protected_docs
