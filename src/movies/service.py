@@ -225,7 +225,11 @@ async def list_movies(
 
     processed_items = []
     for row in items:
-        if isinstance(row, tuple):
+        if hasattr(row, "_mapping"):
+            movie = row[0]
+            movie.average_rating = float(row._mapping.get("average_rating") or 0.0)
+            movie.likes_count = int(row._mapping.get("likes_count") or 0)
+        elif isinstance(row, (tuple, list)) and len(row) >= 3:
             movie = row[0]
             movie.average_rating = float(row[1]) if row[1] is not None else 0.0
             movie.likes_count = int(row[2]) if row[2] is not None else 0
@@ -233,6 +237,7 @@ async def list_movies(
             movie = row
             movie.average_rating = 0.0
             movie.likes_count = 0
+
         processed_items.append(movie)
 
     return processed_items, total
