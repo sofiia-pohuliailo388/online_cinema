@@ -41,4 +41,5 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = ""
     FRONTEND_URL: str = ""
 
+
 settings = Settings()
