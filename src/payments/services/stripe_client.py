@@ -1,51 +1,68 @@
+"""Thin wrapper around the Stripe SDK."""
+import asyncio
+import logging
+
 import stripe
-from fastapi import HTTPException, status
+
 from src.core.config import settings
+from src.core.exceptions import BadRequestError
+
+logger = logging.getLogger(__name__)
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
-########## Тестова версія модулю для перевірки роботи страйпу
-def create_test_checkout_session(success_url: str, cancel_url: str) -> dict:
+
+async def create_checkout_session(
+    *, order_id: int, customer_email: str, line_items: list[dict]
+) -> stripe.checkout.Session:
+    """Create a Stripe Checkout Session with ``order_id`` stored in metadata.
+
+    Raises:
+        BadRequestError: If Stripe rejects the request.
+    """
     try:
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[
-                {
-                    "price_data": {
-                        "currency": "usd",
-                        "product_data": {
-                            "name": "Test Product",
-                        },
-                        "unit_amount": 1000,
-                    },
-                    "quantity": 1,
-                },
-            ],
+        return await asyncio.to_thread(
+            stripe.checkout.Session.create,
             mode="payment",
-            success_url=success_url,
-            cancel_url=cancel_url,
+            line_items=line_items,
+            customer_email=customer_email,
+            metadata={"order_id": str(order_id)},
+            success_url=f"{settings.FRONTEND_URL}/payments/success",
+            cancel_url=f"{settings.FRONTEND_URL}/payments/failed",
         )
-        return {"checkout_url": session.url, "session_id": session.id}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Stripe Checkout Error: {str(e)}",
-        )
+    except stripe.StripeError as exc:
+        logger.error("Stripe checkout session creation failed for order %s: %s", order_id, exc)
+        raise BadRequestError("Could not create a payment session") from exc
 
 
-def verify_stripe_webhook(payload: bytes, sig_header: str) -> stripe.Event:
+async def create_refund(payment_intent_id: str) -> stripe.Refund:
+    """Refund the full amount of a payment intent.
+
+    Raises:
+        BadRequestError: If Stripe rejects the refund.
+    """
     try:
-        event = stripe.Webhook.construct_event(
+        return await asyncio.to_thread(stripe.Refund.create, payment_intent=payment_intent_id)
+    except stripe.StripeError as exc:
+        logger.error("Stripe refund failed for %s: %s", payment_intent_id, exc)
+        raise BadRequestError("Stripe could not process the refund") from exc
+
+
+def verify_stripe_webhook(payload: bytes, sig_header: str | None) -> stripe.Event:
+    """Validate the webhook signature and return the parsed event.
+
+    Raises:
+        BadRequestError: If the signature header is missing or invalid, or the payload is malformed.
+    """
+    if not sig_header:
+        raise BadRequestError("Missing Stripe signature")
+    try:
+        return stripe.Webhook.construct_event(
             payload=payload,
             sig_header=sig_header,
             secret=settings.STRIPE_WEBHOOK_SECRET,
         )
-        return event
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payload"
-        )
-    except stripe.error.SignatureVerificationError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature"
-        )
+    except ValueError as exc:
+        raise BadRequestError("Invalid payload") from exc
+    except stripe.SignatureVerificationError as exc:
+        raise BadRequestError("Invalid signature") from exc
