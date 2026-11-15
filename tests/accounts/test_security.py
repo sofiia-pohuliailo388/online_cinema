@@ -7,13 +7,14 @@ import pytest
 
 from src.accounts.enums import UserGroupEnum
 from src.accounts.security import (
+    DUMMY_PASSWORD_HASH,
     MAX_PASSWORD_BYTES,
     create_access_token,
     decode_token,
+    generate_token,
     hash_password,
     validate_password_strength,
     verify_password,
-    generate_token,
 )
 from src.core.config import settings
 from src.core.exceptions import UnauthorizedError
@@ -124,6 +125,17 @@ def test_decode_token_rejects_wrong_signature() -> None:
 
     with pytest.raises(UnauthorizedError):
         decode_token(token)
+
+
+def test_decode_token_rejects_token_without_expiration() -> None:
+    token = jwt.encode({"user_id": 1, "group": "USER"}, settings.SECRET_KEY, algorithm="HS256")
+
+    with pytest.raises(UnauthorizedError):
+        decode_token(token)
+
+
+def test_dummy_password_hash_is_a_valid_bcrypt_hash() -> None:
+    assert verify_password("any-password", DUMMY_PASSWORD_HASH) is False
 
 
 def test_decode_token_rejects_garbage() -> None:

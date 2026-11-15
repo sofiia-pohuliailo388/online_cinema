@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.accounts.enums import UserGroupEnum
 from src.accounts.models import RefreshToken
-from src.accounts.security import decode_token
+from src.accounts.security import DUMMY_PASSWORD_HASH, decode_token
 from src.accounts.service import login_user
 from src.core.config import settings
 from src.core.exceptions import PermissionDeniedError, UnauthorizedError
@@ -101,3 +101,21 @@ async def test_login_user_does_not_reveal_inactive_account_to_wrong_password(
 
     with pytest.raises(UnauthorizedError, match="Invalid email or password"):
         await login_user(db_session, "user@test.com", "Wr0ng!Pass")
+
+
+async def test_login_user_checks_password_hash_even_for_unknown_email(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checked_hashes: list[str] = []
+
+    def fake_verify_password(plain_password: str, hashed_password: str) -> bool:
+        checked_hashes.append(hashed_password)
+        return False
+
+    monkeypatch.setattr("src.accounts.service.verify_password", fake_verify_password)
+
+    with pytest.raises(UnauthorizedError):
+        await login_user(db_session, "nobody@test.com", PASSWORD)
+
+    assert checked_hashes == [DUMMY_PASSWORD_HASH]

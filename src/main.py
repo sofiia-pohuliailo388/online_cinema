@@ -1,12 +1,10 @@
-"""FastAPI application factory: the only place where routers are wired together.
 
-To add your domain: import its ``router`` and add one ``include_router`` line.
-"""
+"""FastAPI application factory."""
 
 from fastapi import FastAPI
 
-from src.accounts.router import router as accounts_router
-from src.cart.router import router as cart_router
+import src.models  # noqa: F401
+
 from src.core.docs import setup_protected_docs
 from src.core.exceptions import register_exception_handlers
 from src.interactions.router import router as interactions_router
@@ -37,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(cart_router, prefix=API_PREFIX)          # P6
     app.include_router(payments_router, prefix=API_PREFIX)      # P7
     app.include_router(orders_router, prefix=API_PREFIX)        # P6
+    # app.include_router(payments_router, prefix=API_PREFIX)      # P7
 
     @app.get("/health", tags=["system"])
     async def health() -> dict[str, str]:
