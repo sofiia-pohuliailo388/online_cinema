@@ -12,19 +12,27 @@ Layer rules (same for every domain):
 """
 
 from typing import Any
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.cart.models import CartItem
+from src.orders.models import OrderItem, Order, StatusEnum
 from src.core.exceptions import ConflictError, NotFoundError
 from src.core.pagination import PaginationParams, paginate
-from src.movies.models import Genre, Movie, Star, Director
+from src.movies.models import Genre, Movie, Star, Director, Certification
 from src.interactions.models import MovieReaction, Rating
 from src.movies.schemas import (
     GenreCreate,
     GenreUpdate,
     MovieCreate,
     MovieUpdate,
+    DirectorUpdate,
+    StarCreate,
+    StarUpdate,
+    DirectorCreate,
+    CertificationCreate,
+    CertificationUpdate,
 )
 from src.movies.filters import MovieFilterParams, apply_movie_filters
 
@@ -33,9 +41,30 @@ from src.movies.filters import MovieFilterParams, apply_movie_filters
 
 
 async def list_genres(db: AsyncSession, pagination: PaginationParams) -> tuple[list[Any], int]:
-    """Return a page of genres ordered by name and the total count."""
-    stmt = select(Genre).order_by(Genre.name)
-    return await paginate(db, stmt, pagination)
+    """Return a page of genres ordered by name with movie counts and the total count."""
+    stmt = (
+        select(
+            Genre,
+            func.count(Movie.id).label("movies_count"),
+        )
+        .outerjoin(Genre.movies)
+        .group_by(Genre.id)
+        .order_by(Genre.name)
+    )
+
+    items, total = await paginate(db, stmt, pagination)
+
+    processed_genres = []
+    for row in items:
+        if isinstance(row, tuple):
+            genre = row[0]
+            genre.movies_count = row[1]
+        else:
+            genre = row
+            genre.movies_count = 0
+        processed_genres.append(genre)
+
+    return processed_genres, total
 
 
 async def get_genre(db: AsyncSession, genre_id: int) -> Genre:
@@ -94,6 +123,10 @@ async def update_genre(db: AsyncSession, genre_id: int, data: GenreUpdate) -> Ge
 
     await db.commit()
     await db.refresh(genre)
+
+    if hasattr(genre, "movies_count"):
+        delattr(genre, "movies_count")
+
     return genre
 
 
@@ -117,14 +150,24 @@ async def get_movie(db: AsyncSession, movie_id: int) -> Movie:
     Raises:
         NotFoundError: if the movie does not exist.
     """
+    avg_rating_subq = (
+        select(func.coalesce(func.avg(Rating.score), 0.0))
+        .where(Rating.movie_id == Movie.id)
+        .scalar_subquery()
+    )
+
+    likes_count_subq = (
+        select(func.count(MovieReaction.id))
+        .where(MovieReaction.movie_id == Movie.id, MovieReaction.is_like.is_(True))
+        .scalar_subquery()
+    )
+
     stmt = (
         select(
             Movie,
-            func.coalesce(func.avg(Rating.score), 0.0).label("average_rating"),
-            func.count(case((MovieReaction.is_like.is_(True), 1), else_=None)).label("likes_count"),
+            avg_rating_subq.label("average_rating"),
+            likes_count_subq.label("likes_count"),
         )
-        .outerjoin(Rating, Rating.movie_id == Movie.id)
-        .outerjoin(MovieReaction, MovieReaction.movie_id == Movie.id)
         .options(
             selectinload(Movie.genres),
             selectinload(Movie.stars),
@@ -132,7 +175,6 @@ async def get_movie(db: AsyncSession, movie_id: int) -> Movie:
             selectinload(Movie.certification),
         )
         .where(Movie.id == movie_id)
-        .group_by(Movie.id)
     )
     result = await db.execute(stmt)
     row = result.first()
@@ -151,21 +193,30 @@ async def list_movies(
     db: AsyncSession, filter_params: MovieFilterParams, pagination_params: PaginationParams
 ) -> tuple[list[Any], int]:
     """Retrieve a paginated, filtered, and searched list of movies with statistics and relations."""
+    avg_rating_subq = (
+        select(func.coalesce(func.avg(Rating.score), 0.0))
+        .where(Rating.movie_id == Movie.id)
+        .scalar_subquery()
+    )
+
+    likes_count_subq = (
+        select(func.count(MovieReaction.id))
+        .where(MovieReaction.movie_id == Movie.id, MovieReaction.is_like.is_(True))
+        .scalar_subquery()
+    )
+
     stmt = (
         select(
             Movie,
-            func.coalesce(func.avg(Rating.score), 0.0).label("average_rating"),
-            func.count(case((MovieReaction.is_like.is_(True), 1), else_=None)).label("likes_count"),
+            avg_rating_subq.label("average_rating"),
+            likes_count_subq.label("likes_count"),
         )
-        .outerjoin(Rating, Rating.movie_id == Movie.id)
-        .outerjoin(MovieReaction, MovieReaction.movie_id == Movie.id)
         .options(
             selectinload(Movie.genres),
             selectinload(Movie.stars),
             selectinload(Movie.directors),
             selectinload(Movie.certification),
         )
-        .group_by(Movie.id)
     )
 
     stmt = apply_movie_filters(stmt, filter_params)
@@ -256,15 +307,164 @@ async def update_movie(db: AsyncSession, movie_id: int, data: MovieUpdate) -> Mo
     return await get_movie(db, movie_id)
 
 
-async def delete_movie(db: AsyncSession, movie_id: int) -> None:
-    """Delete a movie by ID.
-
-    Raises:
-        NotFoundError: if the movie does not exist.
+async def delete_movie(db: AsyncSession, movie_id: int) -> dict | None:
+    """Delete a movie with business safety checks:
+    - Raises ConflictError (409) if the movie has been purchased (order status is PAID).
+    - Returns a warning message if the movie is present in user carts.
     """
-    movie = await db.get(Movie, movie_id)
-    if not movie:
-        raise NotFoundError(f"Movie with ID {movie_id} not found")
+    movie = await get_movie(db, movie_id)
+
+    paid_purchases_count = await db.scalar(
+        select(func.count(OrderItem.id))
+        .join(Order, OrderItem.order_id == Order.id)
+        .where(
+            OrderItem.movie_id == movie_id,
+            Order.status == StatusEnum.PAID,
+        )
+    )
+    if paid_purchases_count and paid_purchases_count > 0:
+        raise ConflictError("Cannot delete a movie that has been purchased by users.")
+
+    cart_count = await db.scalar(
+        select(func.count(CartItem.id)).where(CartItem.movie_id == movie_id)
+    )
+    warning = None
+    if cart_count and cart_count > 0:
+        warning = "Warning: This movie is currently in some users' carts."
 
     await db.delete(movie)
+    await db.commit()
+
+    return {"warning": warning} if warning else None
+
+
+# --- STARS CRUD ---
+async def list_stars(db: AsyncSession, pagination: PaginationParams) -> tuple[list[Star], int]:
+    stmt = select(Star).order_by(Star.name)
+    return await paginate(db, stmt, pagination)
+
+
+async def get_star(db: AsyncSession, star_id: int) -> Star:
+    star = await db.get(Star, star_id)
+    if not star:
+        raise NotFoundError(f"Star with id {star_id} not found")
+    return star
+
+
+async def create_star(db: AsyncSession, data: StarCreate) -> Star:
+    existing = await db.scalar(select(Star).where(Star.name == data.name))
+    if existing:
+        raise ConflictError(f"Star '{data.name}' already exists")
+    star = Star(**data.model_dump())
+    db.add(star)
+    await db.commit()
+    await db.refresh(star)
+    return star
+
+
+async def update_star(db: AsyncSession, star_id: int, data: StarUpdate) -> Star:
+    star = await get_star(db, star_id)
+    if data.name is not None and data.name != star.name:
+        existing = await db.scalar(select(Star).where(Star.name == data.name))
+        if existing:
+            raise ConflictError(f"Star '{data.name}' already exists")
+        star.name = data.name
+    await db.commit()
+    await db.refresh(star)
+    return star
+
+
+async def delete_star(db: AsyncSession, star_id: int) -> None:
+    star = await get_star(db, star_id)
+    await db.delete(star)
+    await db.commit()
+
+
+# --- DIRECTORS CRUD ---
+async def list_directors(
+    db: AsyncSession, pagination: PaginationParams
+) -> tuple[list[Director], int]:
+    stmt = select(Director).order_by(Director.name)
+    return await paginate(db, stmt, pagination)
+
+
+async def get_director(db: AsyncSession, director_id: int) -> Director:
+    director = await db.get(Director, director_id)
+    if not director:
+        raise NotFoundError(f"Director with id {director_id} not found")
+    return director
+
+
+async def create_director(db: AsyncSession, data: DirectorCreate) -> Director:
+    existing = await db.scalar(select(Director).where(Director.name == data.name))
+    if existing:
+        raise ConflictError(f"Director '{data.name}' already exists")
+    director = Director(**data.model_dump())
+    db.add(director)
+    await db.commit()
+    await db.refresh(director)
+    return director
+
+
+async def update_director(db: AsyncSession, director_id: int, data: DirectorUpdate) -> Director:
+    director = await get_director(db, director_id)
+    if data.name is not None and data.name != director.name:
+        existing = await db.scalar(select(Director).where(Director.name == data.name))
+        if existing:
+            raise ConflictError(f"Director '{data.name}' already exists")
+        director.name = data.name
+    await db.commit()
+    await db.refresh(director)
+    return director
+
+
+async def delete_director(db: AsyncSession, director_id: int) -> None:
+    director = await get_director(db, director_id)
+    await db.delete(director)
+    await db.commit()
+
+
+# --- CERTIFICATIONS CRUD ---
+async def list_certifications(
+    db: AsyncSession, pagination: PaginationParams
+) -> tuple[list[Certification], int]:
+    stmt = select(Certification).order_by(Certification.name)
+    return await paginate(db, stmt, pagination)
+
+
+async def get_certification(db: AsyncSession, certification_id: int) -> Certification:
+    cert = await db.get(Certification, certification_id)
+    if not cert:
+        raise NotFoundError(f"Certification with id {certification_id} not found")
+    return cert
+
+
+async def create_certification(db: AsyncSession, data: CertificationCreate) -> Certification:
+    existing = await db.scalar(select(Certification).where(Certification.name == data.name))
+    if existing:
+        raise ConflictError(f"Certification '{data.name}' already exists")
+    cert = Certification(**data.model_dump())
+    db.add(cert)
+    await db.commit()
+    await db.refresh(cert)
+    return cert
+
+
+async def update_certification(
+    db: AsyncSession, certification_id: int, data: CertificationUpdate
+) -> Certification:
+    cert = await get_certification(db, certification_id)
+    if data.name is not None and data.name != cert.name:
+        existing = await db.scalar(select(Certification).where(Certification.name == data.name))
+        if existing:
+            raise ConflictError(f"Certification '{data.name}' already exists")
+        cert.name = data.name
+    await db.commit()
+    await db.refresh(cert)
+    return cert
+
+
+async def delete_certification(db: AsyncSession, certification_id: int) -> None:
+    cert = await get_certification(db, certification_id)
+    await db.delete(cert)
     await db.commit()

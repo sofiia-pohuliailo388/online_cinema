@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/cinema"
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    DOCS_USERNAME: str = "admin"
+    DOCS_PASSWORD: str = "admin"
+
     ACCESS_TOKEN_TTL_MINUTES: int = 15
     REFRESH_TOKEN_TTL_DAYS: int = 7
     ACTIVATION_TOKEN_TTL_HOURS: int = 24

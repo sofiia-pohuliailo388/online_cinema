@@ -99,7 +99,7 @@ async def test_update_genre(client: AsyncClient, login_as: Callable[..., Any]) -
     response = await client.patch(f"{URL}/{genre_id}", json={"name": "Action"})
 
     assert response.status_code == 200
-    assert response.json() == {"id": genre_id, "name": "Action"}
+    assert response.json() == {"id": genre_id, "name": "Action", "movies_count": 0}
 
 
 async def test_delete_genre(client: AsyncClient, login_as: Callable[..., Any]) -> None:
