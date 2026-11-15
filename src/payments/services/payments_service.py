@@ -104,7 +104,10 @@ async def handle_checkout_completed(db: AsyncSession, session) -> PaymentResult 
     amount = Decimal(session["amount_total"]) / 100
     if amount != order.total_amount:
         logger.warning(
-            "Amount mismatch for order %s: stripe=%s, order=%s", order_id, amount, order.total_amount
+            "Amount mismatch for order %s: stripe=%s, order=%s",
+            order_id,
+            amount,
+            order.total_amount
         )
 
     user_id = order.user_id
