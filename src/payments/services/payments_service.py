@@ -174,14 +174,16 @@ async def get_all_payments(
 
 
 async def refund_payment(db: AsyncSession, payment_id: int) -> Payment:
-    """Refund a successful payment through Stripe and mark it ``refunded``.
+    """Refund a successful payment through Stripe, mark it ``refunded`` and release the order.
 
     Raises:
         NotFoundError: If the payment does not exist.
         ConflictError: If the payment is not successful or has no Stripe id.
         BadRequestError: If Stripe rejects the refund.
     """
-    payment = await db.scalar(select(Payment).where(Payment.id == payment_id))
+    payment = await db.scalar(
+        select(Payment).where(Payment.id == payment_id).options(selectinload(Payment.order))
+    )
     if payment is None:
         raise NotFoundError(f"Payment {payment_id} is not found")
     if payment.status != PaymentStatus.successful:
@@ -191,8 +193,9 @@ async def refund_payment(db: AsyncSession, payment_id: int) -> Payment:
 
     await stripe_client.create_refund(payment.external_payment_id)
     payment.status = PaymentStatus.refunded
+    payment.order.status = StatusEnum.CANCELED
     await db.commit()
-    logger.info("Payment %s refunded", payment_id)
+    logger.info("Payment %s refunded, order %s marked refunded", payment_id, payment.order_id)
 
     return await db.scalar(
         select(Payment)

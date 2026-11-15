@@ -34,7 +34,6 @@ async def stripe_webhook(request: Request, db: DbSession) -> dict:
         try:
             result = await service.handle_checkout_completed(db, event["data"]["object"])
         except ConflictError:
-            # Order was canceled but the money was charged: needs a manual refund.
             logger.error("Paid event for a canceled order, event id %s", event["id"])
             result = None
 
