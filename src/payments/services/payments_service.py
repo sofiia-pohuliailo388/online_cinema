@@ -59,14 +59,16 @@ async def create_checkout(db: AsyncSession, user_id: int, email: str, order_id: 
     for item in order.order_items:
         item.price_at_order = item.movie.price
         total += item.price_at_order
-        line_items.append({
-            "quantity": 1,
-            "price_data": {
-                "currency": "usd",
-                "unit_amount": _to_cents(item.price_at_order),
-                "product_data": {"name": item.movie.name},
-            },
-        })
+        line_items.append(
+            {
+                "quantity": 1,
+                "price_data": {
+                    "currency": "usd",
+                    "unit_amount": _to_cents(item.price_at_order),
+                    "product_data": {"name": item.movie.name},
+                },
+            }
+        )
     order.total_amount = total
     await db.commit()
 
@@ -96,10 +98,22 @@ async def handle_checkout_completed(db: AsyncSession, session) -> PaymentResult 
 
     order_id = int(session["metadata"]["order_id"])
     order = await db.scalar(
-        select(Order).where(Order.id == order_id).options(selectinload(Order.order_items))
+        select(Order)
+        .where(Order.id == order_id)
+        .options(selectinload(Order.order_items))
+        .with_for_update()
     )
+
     if order is None:
         raise NotFoundError(f"Order {order_id} is not found")
+
+    if order.status != StatusEnum.PENDING:
+        logger.error(
+            "Payment intent %s received for order %s in status %s, manual refund required",
+            external_id, order_id, order.status,
+        )
+        await db.rollback()
+        return None
 
     amount = Decimal(session["amount_total"]) / 100
     if amount != order.total_amount:
@@ -142,7 +156,7 @@ async def handle_checkout_completed(db: AsyncSession, session) -> PaymentResult 
 
 
 async def get_user_payments(
-    db: AsyncSession, user_id: int, pagination: PaginationParams
+        db: AsyncSession, user_id: int, pagination: PaginationParams
 ) -> tuple[list[Payment], int]:
     """Return the user's payment history (newest first) and the total count."""
     stmt = (
@@ -155,12 +169,12 @@ async def get_user_payments(
 
 
 async def get_all_payments(
-    db: AsyncSession,
-    pagination: PaginationParams,
-    user_id: int | None = None,
-    status: PaymentStatus | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
+        db: AsyncSession,
+        pagination: PaginationParams,
+        user_id: int | None = None,
+        status: PaymentStatus | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
 ) -> tuple[list[Payment], int]:
     """Return all payments with optional admin filters (user, status, date range)."""
     stmt = select(Payment)
