@@ -42,7 +42,11 @@ async def create_refund(payment_intent_id: str) -> stripe.Refund:
         BadRequestError: If Stripe rejects the refund.
     """
     try:
-        return await asyncio.to_thread(stripe.Refund.create, payment_intent=payment_intent_id)
+        return await asyncio.to_thread(
+            stripe.Refund.create,
+            payment_intent=payment_intent_id,
+            idempotency_key=f"refund-{payment_intent_id}",
+        )
     except stripe.StripeError as exc:
         logger.error("Stripe refund failed for %s: %s", payment_intent_id, exc)
         raise BadRequestError("Stripe could not process the refund") from exc

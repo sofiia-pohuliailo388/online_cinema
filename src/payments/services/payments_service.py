@@ -184,8 +184,12 @@ async def refund_payment(db: AsyncSession, payment_id: int) -> Payment:
         ConflictError: If the payment is not successful or has no Stripe id.
         BadRequestError: If Stripe rejects the refund.
     """
+
     payment = await db.scalar(
-        select(Payment).where(Payment.id == payment_id).options(selectinload(Payment.order))
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .options(selectinload(Payment.order))
+        .with_for_update()
     )
     if payment is None:
         raise NotFoundError(f"Payment {payment_id} is not found")
