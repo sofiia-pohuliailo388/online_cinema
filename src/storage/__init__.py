@@ -1,5 +1,5 @@
-"""File storage (owner: P3): MinIO / S3 via boto3, e.g. user avatars.
+"""File storage (owner: P3): S3-compatible object storage (Silo / MinIO), e.g. user avatars.
 
-Planned contract: ``upload_file(key: str, data: bytes, content_type: str) -> str`` and
-``get_file_url(key: str) -> str`` (presigned URL). Store only the key in the database.
+Public contract: ``upload_file``, ``delete_file``, ``get_file_url`` in ``src.storage.s3``.
+Only object keys are stored in the database; links are generated on demand.
 """

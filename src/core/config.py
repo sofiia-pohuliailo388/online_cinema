@@ -32,10 +32,15 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 1025
     EMAIL_FROM: str = "noreply@cinema.local"
 
+    # S3-compatible storage (Silo, a maintained MinIO fork, in Docker).
+    # MINIO_ENDPOINT is used by the app to upload files (inside Docker: http://minio:9000).
+    # MINIO_PUBLIC_ENDPOINT is put into the links the browser opens (http://localhost:9000).
     MINIO_ENDPOINT: str = "http://localhost:9000"
+    MINIO_PUBLIC_ENDPOINT: str = "http://localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "avatars"
+    AVATAR_URL_TTL_SECONDS: int = 3600
 
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
