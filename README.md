@@ -1,375 +1,421 @@
 # 🎬 Online Cinema API
-
-Бекенд онлайн-кінотеатру на **FastAPI**: реєстрація з активацією через email, JWT-авторизація,
-каталог фільмів з пошуком і фільтрами, лайки, коментарі, рейтинги, обране, кошик, замовлення
-та оплата через **Stripe**.
-
-> 👩‍💻 Пишеш код у цьому репозиторії? Спершу прочитай **[CONTRIBUTING.md](CONTRIBUTING.md)**.
-
+ 
+Backend for an online cinema built with **FastAPI**: registration with email activation,
+JWT authentication, a movie catalog with search and filters, likes, comments, ratings,
+favorites, a shopping cart, orders and payments via **Stripe**.
+ 
+> 👩‍💻 Writing code in this repository? Read **[CONTRIBUTING.md](CONTRIBUTING.md)** first.
+ 
 ---
-
-## Зміст
-
-- [Стек](#стек)
-- [Швидкий старт (Docker)](#швидкий-старт-docker)
-- [Сервіси та адреси](#сервіси-та-адреси)
-- [Як користуватись API](#як-користуватись-api)
-- [Локальна розробка без Docker](#локальна-розробка-без-docker)
-- [Тести та перевірки якості](#тести-та-перевірки-якості)
-- [Змінні оточення](#змінні-оточення)
-- [Структура проєкту](#структура-проєкту)
-- [Ендпоінти](#ендпоінти)
+ 
+## 🌐 Live Demo
+ 
+The project is deployed on AWS EC2 with HTTPS:
+ 
+| What | Link | Credentials |
+|---|---|---|
+| **Swagger UI** | https://16-171-245-95.sslip.io/docs | `admin` / `MyStrongPass123` |
+| ReDoc | https://16-171-245-95.sslip.io/redoc | `admin` / `MyStrongPass123` |
+| Health check | https://16-171-245-95.sslip.io/health | — |
+| API base URL | https://16-171-245-95.sslip.io/api/v1 | — |
+ 
+**Demo accounts** (already activated, for `POST /api/v1/accounts/login`):
+ 
+| Role | Email | Password |
+|---|---|---|
+| 👤 User | `user@cinema.com` | `Str0ng!Pass` |
+| 👑 Admin | `admin@cinema.com` | `Str0ng!Pass` |
+ 
+> The Swagger credentials only open the `/docs` page. To call protected endpoints, log in
+> with a demo account (`POST /api/v1/accounts/login`), copy `access_token` from the response,
+> click **Authorize** 🔒 and paste the token. Access tokens live 15 minutes.
+ 
+---
+ 
+## Contents
+ 
+- [Live Demo](#-live-demo)
+- [Tech Stack](#tech-stack)
+- [Quick Start (Docker)](#quick-start-docker)
+- [Services and URLs](#services-and-urls)
+- [Using the API](#using-the-api)
+- [Local Development without Docker](#local-development-without-docker)
+- [Tests and Quality Checks](#tests-and-quality-checks)
+- [Environment Variables](#environment-variables)
+- [Project Structure](#project-structure)
+- [Endpoints](#endpoints)
 - [CI/CD](#cicd)
-- [Команда](#команда)
-
+- [Deployment](#deployment)
+- [Team](#team)
 ---
-
-## Стек
-
-| Що | Чим |
+ 
+## Tech Stack
+ 
+| Area | Tools |
 |---|---|
 | API | FastAPI, Pydantic v2 |
-| База даних | PostgreSQL 16, SQLAlchemy 2.0 (async), Alembic |
-| Фонові задачі | Celery + celery-beat, Redis |
-| Пошта | SMTP (MailHog у розробці), шаблони Jinja2 |
-| Файли (аватари) | S3-сумісне сховище — [Silo](https://silo.pigsty.io) (форк MinIO), boto3 |
-| Оплата | Stripe Checkout + webhooks |
-| Залежності | Poetry |
-| Якість коду | pytest + pytest-cov, flake8, mypy |
-| Інфраструктура | Docker, Docker Compose, GitHub Actions |
-
+| Database | PostgreSQL 16, SQLAlchemy 2.0 (async), Alembic |
+| Background jobs | Celery + Celery Beat, Redis |
+| Email | SMTP (MailHog in development), Jinja2 templates |
+| Files (avatars) | S3-compatible storage — [Silo](https://silo.pigsty.io) (a MinIO fork), boto3 |
+| Payments | Stripe Checkout + webhooks |
+| Dependencies | Poetry |
+| Code quality | pytest + pytest-cov, flake8, mypy |
+| Infrastructure | Docker, Docker Compose, GitHub Actions, AWS EC2, Caddy |
+ 
 ---
-
-## Швидкий старт (Docker)
-
-Потрібен лише [Docker Desktop](https://www.docker.com/products/docker-desktop/).
-
+ 
+## Quick Start (Docker)
+ 
+All you need is [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+ 
 ```bash
 git clone https://github.com/sofiia-pohuliailo388/online_cinema.git
 cd online_cinema
 cp .env.example .env
 docker compose up --build
 ```
-
-Коли в логах з'явиться `Uvicorn running on http://0.0.0.0:8000` — все готово.
-Міграції бази даних застосовуються автоматично під час старту.
-
-**Заповнити каталог тестовими фільмами** (в окремому терміналі):
-
+ 
+Once the logs show `Uvicorn running on http://0.0.0.0:8000`, everything is ready.
+Database migrations are applied automatically on startup.
+ 
+**Fill the catalog with demo movies** (in a separate terminal):
+ 
 ```bash
 docker compose exec app python -m src.movies.seed
 ```
-
-Зупинити: `Ctrl + C`, або `docker compose down`.
-Видалити разом з даними бази: `docker compose down -v`.
-
+ 
+Stop: `Ctrl + C` or `docker compose down`.
+Stop and delete all data: `docker compose down -v`.
+ 
 ---
-
-## Сервіси та адреси
-
-| Сервіс | Адреса | Логін |
+ 
+## Services and URLs
+ 
+| Service | URL | Credentials |
 |---|---|---|
-| **Swagger (документація API)** | http://localhost:8000/docs | `admin` / `admin` |
+| **Swagger (API docs)** | http://localhost:8000/docs | `admin` / `admin` |
 | API | http://localhost:8000/api/v1 | — |
-| Health-check | http://localhost:8000/health | — |
-| **MailHog** (вхідні листи) | http://localhost:8025 | — |
-| **Консоль сховища** (аватари) | http://localhost:9001 | `minioadmin` / `minioadmin` |
-| PostgreSQL | `localhost:5432` | `postgres` / `postgres`, база `cinema` |
+| Health check | http://localhost:8000/health | — |
+| **MailHog** (inbox for test emails) | http://localhost:8025 | — |
+| **Storage console** (avatars) | http://localhost:9001 | `minioadmin` / `minioadmin` |
+| PostgreSQL | `localhost:5432` | `postgres` / `postgres`, database `cinema` |
 | Redis | `localhost:6379` | — |
-
-> Swagger закритий логіном (вимога ТЗ). Логін і пароль задаються в `.env`:
-> `DOCS_USERNAME`, `DOCS_PASSWORD`.
-
+ 
+> Swagger is protected with HTTP Basic auth (a project requirement). The credentials are set
+> in `.env`: `DOCS_USERNAME`, `DOCS_PASSWORD`.
+ 
 ---
-
-## Як користуватись API
-
-### 1. Зареєструватись і активувати акаунт
-
-1. Swagger → `POST /api/v1/accounts/register` → email і пароль
-   (мінімум 8 символів: велика й мала літера, цифра, спецсимвол — наприклад `Str0ng!Pass`).
-2. Відкрити http://localhost:8025 → лист **Activation link** → кнопка **Activate Account**.
-
-> Посилання одноразове: повторне відкриття покаже `Invalid activation token` — це нормально.
-
-### 2. Залогінитись у Swagger
-
-1. `POST /api/v1/accounts/login` → скопіювати `access_token` з відповіді.
-2. Кнопка **Authorize** 🔒 угорі Swagger → вставити токен → **Authorize**.
-
-Access-токен живе 15 хвилин. Новий — через `POST /api/v1/accounts/refresh` з `refresh_token`.
-
-### 3. Стати модератором або адміном
-
-Нові користувачі мають групу `USER`. Першого адміна призначте прямо в базі:
-
+ 
+## Using the API
+ 
+### 1. Register and activate an account
+ 
+1. Swagger → `POST /api/v1/accounts/register` → email and password
+   (at least 8 characters with an uppercase letter, a lowercase letter, a digit and a special
+   character, e.g. `Str0ng!Pass`).
+2. Open http://localhost:8025 → the **Activation link** email → **Activate Account**.
+> The link works once: opening it again shows `Invalid activation token`, which is expected.
+ 
+### 2. Log in to Swagger
+ 
+1. `POST /api/v1/accounts/login` → copy `access_token` from the response.
+2. Click **Authorize** 🔒 at the top of Swagger → paste the token → **Authorize**.
+An access token lives 15 minutes. Get a new one with `POST /api/v1/accounts/refresh`
+using your `refresh_token`.
+ 
+### 3. Become a moderator or admin
+ 
+New users belong to the `USER` group. Promote the first admin directly in the database:
+ 
 ```bash
 docker compose exec db psql -U postgres -d cinema -c \
   "update users set group_id = (select id from user_groups where name = 'ADMIN') \
    where email = 'you@example.com';"
 ```
-
-Після цього залогіньтесь заново. Далі адмін може змінювати групи інших через
+ 
+Then log in again. From now on the admin can change other users' groups via
 `PATCH /api/v1/admin/users/{user_id}/group`.
-
-| Група | Може |
+ 
+| Group | Can |
 |---|---|
-| `USER` | каталог, лайки, коментарі, обране, кошик, замовлення, оплата, профіль |
-| `MODERATOR` | + керування фільмами, жанрами, акторами, режисерами, сертифікатами |
-| `ADMIN` | + усе модераторське, керування користувачами (групи, ручна активація), кошики й замовлення всіх користувачів, усі платежі, повернення коштів |
-
-### 4. Купити фільм
-
-1. `POST /api/v1/cart/items` — додати фільм у кошик.
-2. `POST /api/v1/orders` — створити замовлення з кошика.
-3. `POST /api/v1/payments/checkout/{order_id}` — отримати посилання на оплату Stripe.
-4. Оплатити тестовою карткою `4242 4242 4242 4242` (будь-яка майбутня дата, будь-який CVC).
-5. Stripe надсилає вебхук → замовлення стає `paid`, у MailHog приходить лист-підтвердження.
-
-> Для оплати потрібні тестові ключі Stripe в `.env` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`).
-> Щоб вебхуки доходили до локального сервера, використовуйте
-> [Stripe CLI](https://docs.stripe.com/stripe-cli):
+| `USER` | browse the catalog, like, comment, favorite, use the cart, orders, payments, profile |
+| `MODERATOR` | everything above + manage movies, genres, stars, directors, certifications |
+| `ADMIN` | everything above + manage users (groups, manual activation), view all carts, orders and payments, issue refunds |
+ 
+### 4. Buy a movie
+ 
+1. `POST /api/v1/cart/items` — add a movie to the cart.
+2. `POST /api/v1/orders` — create an order from the cart.
+3. `POST /api/v1/payments/checkout/{order_id}` — get a Stripe payment link.
+4. Pay with the test card `4242 4242 4242 4242` (any future date, any CVC).
+5. Stripe sends a webhook → the order becomes `paid` and a confirmation email arrives in MailHog.
+> Payments need Stripe test keys in `.env` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`).
+> To receive webhooks locally, use the [Stripe CLI](https://docs.stripe.com/stripe-cli):
 > `stripe listen --forward-to localhost:8000/api/v1/payments/webhook`
-
+ 
 ---
-
-## Локальна розробка без Docker
-
-Потрібні Python 3.12+ і [Poetry](https://python-poetry.org/docs/#installation).
-
+ 
+## Local Development without Docker
+ 
+You need Python 3.12+ and [Poetry](https://python-poetry.org/docs/#installation).
+ 
 ```bash
 poetry install
 ```
-
-Для запуску самого API потрібні PostgreSQL і Redis — найпростіше підняти їх через Docker:
-
+ 
+The API itself needs PostgreSQL and Redis. The easiest way is to start them with Docker:
+ 
 ```bash
 docker compose up -d db redis mailhog
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/cinema poetry run alembic upgrade head
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/cinema poetry run uvicorn src.main:app --reload
 ```
-
-> У `.env` адреси сервісів вказані для Docker (`db`, `redis`, `mailhog`).
-> Поза Docker використовуйте `localhost`, як у командах вище.
-
+ 
+> Service addresses in `.env` point to Docker hosts (`db`, `redis`, `mailhog`).
+> Outside Docker, use `localhost` as in the commands above.
+ 
 ---
-
-## Тести та перевірки якості
-
-Тести йдуть на SQLite в пам'яті — **Docker для них не потрібен**. Celery виконує задачі одразу,
-справжні листи не відправляються, Stripe і сховище файлів замінюються заглушками.
-
+ 
+## Tests and Quality Checks
+ 
+Tests run on in-memory SQLite, so **Docker is not needed**. Celery runs tasks immediately,
+no real emails are sent, and Stripe and file storage are replaced with mocks.
+ 
 ```bash
-poetry run pytest                                   # усі тести
-poetry run pytest tests/movies -v                   # тести одного домену
-poetry run pytest --cov=src --cov-report=term       # з покриттям
-poetry run flake8 .                                 # лінтер
-poetry run mypy src                                 # перевірка типів
-poetry run alembic heads                            # має бути рівно ОДНА голова міграцій
+poetry run pytest                                   # all tests
+poetry run pytest tests/movies -v                   # tests of one domain
+poetry run pytest --cov=src --cov-report=term       # with coverage
+poetry run flake8 .                                 # linter
+poetry run mypy src                                 # type checking
+poetry run alembic heads                            # must show exactly ONE migration head
 ```
-
-| Тип тестів (ТЗ, розділ 10) | Де |
+ 
+**419 tests**, **77% coverage** (CI requires at least 75%).
+ 
+| Test type | Where |
 |---|---|
-| Unit: валідація, утиліти, бізнес-правила | `tests/*/test_*_service.py`, `tests/*/test_*schemas.py`, `tests/accounts/test_security.py` |
-| Інтеграційні: ендпоінти + БД, JWT | `tests/*/test_*_router.py`, `tests/accounts/test_auth_dependencies.py`, `tests/interactions/`, `tests/movies/` |
-| Функціональні (e2e): повний сценарій авторизації | `tests/accounts/test_auth_flow.py` |
-| Фонові задачі й пошта | `tests/tasks/`, `tests/payments/test_payment_email.py` |
-
+| Unit: validation, utilities, business rules | `tests/*/test_*_service.py`, `tests/*/test_*schemas.py`, `tests/accounts/test_security.py` |
+| Integration: endpoints + database, JWT | `tests/*/test_*_router.py`, `tests/accounts/test_auth_dependencies.py`, `tests/interactions/`, `tests/movies/` |
+| Functional (e2e): full authentication flow | `tests/accounts/test_auth_flow.py` |
+| Background jobs and email | `tests/tasks/`, `tests/payments/test_payment_email.py` |
+ 
 ---
-
-## Змінні оточення
-
-Усі змінні — у [`.env.example`](.env.example). Скопіюйте його в `.env` і змініть за потреби.
-**`.env` у git не потрапляє.**
-
-| Змінна | Для чого |
+ 
+## Environment Variables
+ 
+All variables are listed in [`.env.example`](.env.example). Copy it to `.env` and adjust as
+needed. **`.env` is never committed to git.**
+ 
+| Variable | Purpose |
 |---|---|
-| `SECRET_KEY` | підпис JWT. **На сервері — довгий випадковий рядок (32+ символи)** |
-| `DATABASE_URL` | підключення до PostgreSQL |
-| `REDIS_URL` | брокер Celery |
-| `APP_BASE_URL` | адреса API — з неї будуються посилання в листах |
-| `FRONTEND_URL` | куди Stripe повертає користувача після оплати |
-| `DOCS_USERNAME`, `DOCS_PASSWORD` | логін до Swagger |
-| `ACCESS_TOKEN_TTL_MINUTES`, `REFRESH_TOKEN_TTL_DAYS` | час життя токенів |
-| `SMTP_HOST`, `SMTP_PORT`, `EMAIL_FROM` | відправка листів |
-| `MINIO_ENDPOINT` | сховище файлів для застосунку (у Docker — `http://minio:9000`) |
-| `MINIO_PUBLIC_ENDPOINT` | адреса сховища в посиланнях для браузера (`http://localhost:9000`) |
-| `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` | доступ до сховища |
-| `AVATAR_URL_TTL_SECONDS` | скільки живе посилання на аватар |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | тестові ключі Stripe |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | налаштування контейнера PostgreSQL |
-
+| `SECRET_KEY` | JWT signing key. **On a server, use a long random string (32+ characters)** |
+| `DATABASE_URL` | PostgreSQL connection |
+| `REDIS_URL` | Celery broker |
+| `APP_BASE_URL` | public API URL, used to build links in emails |
+| `FRONTEND_URL` | where Stripe redirects the user after payment |
+| `DOCS_USERNAME`, `DOCS_PASSWORD` | Swagger login |
+| `ACCESS_TOKEN_TTL_MINUTES`, `REFRESH_TOKEN_TTL_DAYS` | token lifetimes |
+| `SMTP_HOST`, `SMTP_PORT`, `EMAIL_FROM` | sending emails |
+| `MINIO_ENDPOINT` | file storage address for the app (in Docker: `http://minio:9000`) |
+| `MINIO_PUBLIC_ENDPOINT` | storage address used in browser links (`http://localhost:9000`) |
+| `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET` | storage access |
+| `AVATAR_URL_TTL_SECONDS` | how long an avatar link stays valid |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe test keys |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | PostgreSQL container settings |
+| `DOMAIN` | production only: the domain Caddy issues an HTTPS certificate for |
+ 
 ---
-
-## Структура проєкту
-
-Код поділений **по доменах**: кожен домен — окрема папка з однаковими шарами
-`models → schemas → service → router`. Детальні правила — у [CONTRIBUTING.md](CONTRIBUTING.md).
-
+ 
+## Project Structure
+ 
+The code is split **by domain**: each domain is a separate folder with the same layers
+`models → schemas → service → router`. Detailed rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
+ 
 ```
 src/
-├── main.py              # створення застосунку, підключення роутерів
-├── models.py            # реєстр усіх моделей (для Alembic і тестів)
-├── core/                # спільне: налаштування, БД, помилки, пагінація, закритий Swagger
-├── accounts/            # реєстрація, JWT, паролі, профіль і аватар, адмінка користувачів
-├── movies/              # фільми, жанри, актори, режисери, сертифікати, фільтри, сідування
-├── interactions/        # лайки, коментарі, рейтинги, обране
-├── cart/                # кошик
-├── orders/              # замовлення
-├── payments/            # Stripe: оплата, вебхук, історія, повернення коштів
-├── notifications/       # листи (через Celery) і сповіщення в застосунку
-├── storage/             # S3-сховище файлів (аватари)
-└── tasks/               # Celery: відправка листів, щогодинне очищення прострочених токенів
-tests/                   # тести, тією ж структурою, що й src/
-alembic/                 # міграції бази даних
-.github/workflows/ci.yml # CI: lint, typecheck, tests, migrations
+├── main.py              # app creation, router registration
+├── models.py            # registry of all models (for Alembic and tests)
+├── core/                # shared: settings, database, errors, pagination, protected Swagger
+├── accounts/            # registration, JWT, passwords, profile and avatar, user admin
+├── movies/              # movies, genres, stars, directors, certifications, filters, seed
+├── interactions/        # likes, comments, ratings, favorites
+├── cart/                # shopping cart
+├── orders/              # orders
+├── payments/            # Stripe: checkout, webhook, history, refunds
+├── notifications/       # emails (via Celery) and in-app notifications
+├── storage/             # S3 file storage (avatars)
+└── tasks/               # Celery: sending emails, hourly cleanup of expired tokens
+tests/                   # tests, mirroring the src/ structure
+alembic/                 # database migrations
+.github/workflows/       # ci.yml (checks) and deploy.yml (auto-deploy)
+docker-compose.prod.yml  # production overrides (Caddy, no reload, restart policies)
+Caddyfile                # reverse proxy + automatic HTTPS
 ```
-
+ 
 ---
-
-## Ендпоінти
-
-Повний опис з прикладами — у Swagger: http://localhost:8000/docs.
-Усі шляхи починаються з `/api/v1`. 🔒 — потрібен логін, 🛡 — модератор, 👑 — адмін.
-
+ 
+## Endpoints
+ 
+Full documentation with examples is in Swagger: http://localhost:8000/docs
+(or the [live demo](https://16-171-245-95.sslip.io/docs)).
+All paths start with `/api/v1`. 🔒 login required, 🛡 moderator, 👑 admin.
+ 
 <details>
-<summary><b>Акаунти</b> — <code>/accounts</code></summary>
-
-| Метод | Шлях | Що робить |
+<summary><b>Accounts</b> — <code>/accounts</code></summary>
+| Method | Path | Description |
 |---|---|---|
-| POST | `/accounts/register` | реєстрація, лист з активацією (діє 24 год) |
-| GET | `/accounts/activate?token=...` | активація з листа |
-| POST | `/accounts/resend-activation` | новий лист активації |
-| POST | `/accounts/login` | пара токенів: access + refresh |
-| POST | `/accounts/refresh` | новий access-токен |
-| POST | `/accounts/logout` | відкликати refresh-токен |
-| POST | `/accounts/change-password` 🔒 | змінити пароль (потрібен старий) |
-| POST | `/accounts/forgot-password` | лист для скидання пароля |
-| POST | `/accounts/reset-password` | новий пароль за токеном з листа |
+| POST | `/accounts/register` | register, sends an activation email (valid 24 h) |
+| GET | `/accounts/activate?token=...` | activate from the email link |
+| POST | `/accounts/resend-activation` | send a new activation email |
+| POST | `/accounts/login` | get a token pair: access + refresh |
+| POST | `/accounts/refresh` | get a new access token |
+| POST | `/accounts/logout` | revoke the refresh token |
+| POST | `/accounts/change-password` 🔒 | change password (old password required) |
+| POST | `/accounts/forgot-password` | send a password reset email |
+| POST | `/accounts/reset-password` | set a new password using the token from the email |
 </details>
-
 <details>
-<summary><b>Профіль</b> — <code>/users/me/profile</code> 🔒</summary>
-
-| Метод | Шлях | Що робить |
+<summary><b>Profile</b> — <code>/users/me/profile</code> 🔒</summary>
+| Method | Path | Description |
 |---|---|---|
-| GET | `/users/me/profile` | мій профіль |
-| PATCH | `/users/me/profile` | змінити ім'я, прізвище, стать, дату народження, інфо |
-| PUT | `/users/me/profile/avatar` | завантажити аватар (JPEG/PNG/WebP, до 2 МБ) |
-| DELETE | `/users/me/profile/avatar` | прибрати аватар |
+| GET | `/users/me/profile` | my profile |
+| PATCH | `/users/me/profile` | update first name, last name, gender, date of birth, info |
+| PUT | `/users/me/profile/avatar` | upload an avatar (JPEG/PNG/WebP, up to 2 MB) |
+| DELETE | `/users/me/profile/avatar` | remove the avatar |
 </details>
-
 <details>
-<summary><b>Адмінка користувачів</b> — <code>/admin/users</code> 👑</summary>
-
-| Метод | Шлях | Що робить |
+<summary><b>User admin</b> — <code>/admin/users</code> 👑</summary>
+| Method | Path | Description |
 |---|---|---|
-| GET | `/admin/users` | список з фільтрами `group`, `is_active`, `email` |
-| GET | `/admin/users/{user_id}` | один користувач |
-| PATCH | `/admin/users/{user_id}/group` | змінити групу |
-| POST | `/admin/users/{user_id}/activate` | активувати вручну |
+| GET | `/admin/users` | list with filters `group`, `is_active`, `email` |
+| GET | `/admin/users/{user_id}` | one user |
+| PATCH | `/admin/users/{user_id}/group` | change group |
+| POST | `/admin/users/{user_id}/activate` | activate manually |
 </details>
-
 <details>
-<summary><b>Каталог</b> — фільми, жанри, актори, режисери, сертифікати</summary>
-
-| Метод | Шлях | Що робить |
+<summary><b>Catalog</b> — movies, genres, stars, directors, certifications</summary>
+| Method | Path | Description |
 |---|---|---|
-| GET | `/movies` | каталог: пагінація, фільтри, сортування, пошук за назвою, описом, актором, режисером |
-| GET | `/movies/{movie_id}` | деталі фільму з рейтингом і лайками |
-| POST / PATCH / DELETE | `/movies`, `/movies/{movie_id}` 🛡 | керування фільмами (купленого фільму видалити не можна) |
-| GET | `/genres` | жанри з кількістю фільмів |
-| GET | `/genres/{genre_id}/movies` | фільми жанру |
-| POST / PATCH / DELETE | `/genres`, `/genres/{genre_id}` 🛡 | керування жанрами |
-| GET / POST / PATCH / DELETE | `/stars`, `/directors`, `/certifications` 🛡 | керування акторами, режисерами, сертифікатами |
+| GET | `/movies` | catalog: pagination, filters, sorting, search by title, description, star, director |
+| GET | `/movies/{movie_id}` | movie details with rating and likes |
+| POST / PATCH / DELETE | `/movies`, `/movies/{movie_id}` 🛡 | manage movies (a purchased movie cannot be deleted) |
+| GET | `/genres` | genres with movie counts |
+| GET | `/genres/{genre_id}/movies` | movies of a genre |
+| POST / PATCH / DELETE | `/genres`, `/genres/{genre_id}` 🛡 | manage genres |
+| GET / POST / PATCH / DELETE | `/stars`, `/directors`, `/certifications` 🛡 | manage stars, directors, certifications |
 </details>
-
 <details>
-<summary><b>Взаємодії</b> 🔒</summary>
-
-| Метод | Шлях | Що робить |
+<summary><b>Interactions</b> 🔒</summary>
+| Method | Path | Description |
 |---|---|---|
-| POST | `/reactions` | лайк / дизлайк фільму (повторно — прибрати) |
-| POST | `/ratings` | оцінка 1–10 |
-| GET | `/movies/{movie_id}/comments` | коментарі фільму |
-| POST | `/comments` | коментар або відповідь (`parent_id`) |
-| POST | `/comments/{comment_id}/likes` | лайк коментаря |
-| POST / DELETE | `/movies/{movie_id}/favorite` | додати / прибрати з обраного |
-| GET | `/favorites` | моє обране з тими самими фільтрами й пошуком, що й каталог |
-| GET | `/movies/{movie_id}/interactions/stats` | середній рейтинг і кількість лайків |
+| POST | `/reactions` | like / dislike a movie (repeat to remove) |
+| POST | `/ratings` | rate from 1 to 10 |
+| GET | `/movies/{movie_id}/comments` | movie comments |
+| POST | `/comments` | comment or reply (`parent_id`) |
+| POST | `/comments/{comment_id}/likes` | like a comment |
+| POST / DELETE | `/movies/{movie_id}/favorite` | add to / remove from favorites |
+| GET | `/favorites` | my favorites with the same filters and search as the catalog |
+| GET | `/movies/{movie_id}/interactions/stats` | average rating and like counts |
 </details>
-
 <details>
-<summary><b>Сповіщення</b> — <code>/notifications</code> 🔒</summary>
-
-| Метод | Шлях | Що робить |
+<summary><b>Notifications</b> — <code>/notifications</code> 🔒</summary>
+| Method | Path | Description |
 |---|---|---|
-| GET | `/notifications` | мої сповіщення (відповіді й лайки на коментарі), `?unread_only=true` |
-| GET | `/notifications/unread-count` | кількість непрочитаних |
-| PATCH | `/notifications/{notification_id}/read` | позначити прочитаним |
-| POST | `/notifications/read-all` | позначити всі прочитаними |
+| GET | `/notifications` | my notifications (replies and likes on comments), `?unread_only=true` |
+| GET | `/notifications/unread-count` | number of unread notifications |
+| PATCH | `/notifications/{notification_id}/read` | mark as read |
+| POST | `/notifications/read-all` | mark all as read |
 </details>
-
 <details>
-<summary><b>Кошик і замовлення</b> 🔒</summary>
-
-| Метод | Шлях | Що робить |
+<summary><b>Cart and orders</b> 🔒</summary>
+| Method | Path | Description |
 |---|---|---|
-| GET | `/cart` | мій кошик |
-| POST | `/cart/items` | додати фільм (куплений або вже доданий — помилка) |
-| DELETE | `/cart/items/{movie_id}` | прибрати фільм |
-| DELETE | `/cart` | очистити кошик |
-| GET | `/cart/{user_id}` 👑 | кошик будь-якого користувача |
-| POST | `/orders` | створити замовлення з кошика |
-| GET | `/users/me/orders` | мої замовлення |
-| GET | `/orders/{order_id}` | одне замовлення |
-| POST | `/orders/{order_id}/cancel` | скасувати неоплачене замовлення |
-| GET | `/orders` 👑 | усі замовлення з фільтрами (користувач, статус, дати) |
+| GET | `/cart` | my cart |
+| POST | `/cart/items` | add a movie (error if purchased or already in the cart) |
+| DELETE | `/cart/items/{movie_id}` | remove a movie |
+| DELETE | `/cart` | clear the cart |
+| GET | `/cart/{user_id}` 👑 | any user's cart |
+| POST | `/orders` | create an order from the cart |
+| GET | `/users/me/orders` | my orders |
+| GET | `/orders/{order_id}` | one order |
+| POST | `/orders/{order_id}/cancel` | cancel an unpaid order |
+| GET | `/orders` 👑 | all orders with filters (user, status, dates) |
 </details>
-
 <details>
-<summary><b>Оплата</b> — <code>/payments</code></summary>
-
-| Метод | Шлях | Що робить |
+<summary><b>Payments</b> — <code>/payments</code></summary>
+| Method | Path | Description |
 |---|---|---|
-| POST | `/payments/checkout/{order_id}` 🔒 | посилання на сторінку оплати Stripe |
-| POST | `/payments/webhook` | вебхук Stripe (підпис перевіряється) |
-| GET | `/payments/failed` | підказка після відхиленої оплати |
-| GET | `/payments/me` 🔒 | моя історія платежів |
-| GET | `/payments` 👑 | усі платежі з фільтрами |
-| POST | `/payments/{payment_id}/refund` 👑 | повернення коштів |
+| POST | `/payments/checkout/{order_id}` 🔒 | Stripe payment page link |
+| POST | `/payments/webhook` | Stripe webhook (signature verified) |
+| GET | `/payments/failed` | hint page after a declined payment |
+| GET | `/payments/me` 🔒 | my payment history |
+| GET | `/payments` 👑 | all payments with filters |
+| POST | `/payments/{payment_id}/refund` 👑 | refund |
 </details>
-
 ---
-
+ 
 ## CI/CD
-
-GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) запускається на кожен
-pull request і пуш у `develop` / `main`:
-
-| Перевірка | Що робить |
+ 
+**CI** — [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull request
+and every push to `develop` / `main`:
+ 
+| Check | What it does |
 |---|---|
 | `lint` | flake8 |
 | `typecheck` | mypy |
-| `tests` | pytest з порогом покриття |
-| `migrations` | на справжньому PostgreSQL: одна голова Alembic, міграції застосовуються, кожна модель має міграцію |
-
-**Правила для гілок `develop` і `main`:** зміни — тільки через pull request,
-**2 апруви** від інших учасників, усі перевірки зелені, усі коментарі закриті.
-
-**Як працюємо:** гілка від свіжого `develop` → `feature/<домен>-<що>` → PR у `develop` →
-ревʼю → мерж. У `main` потрапляє лише перевірений `develop`.
-
+| `tests` | pytest with a coverage threshold (75%) |
+| `migrations` | on real PostgreSQL: one Alembic head, migrations apply, every model has a migration |
+ 
+**CD** — [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs on every push to
+`main`: GitHub Actions connects to the EC2 server over SSH, pulls `main`, rebuilds and restarts
+the containers, and checks `/health`. It can also be started manually
+(**Actions → Deploy → Run workflow**).
+ 
+**Branch rules for `develop` and `main`:** changes only via pull request,
+**2 approvals** from other team members, all checks green, all conversations resolved,
+no force pushes.
+ 
+**Workflow:** branch off a fresh `develop` → `feature/<domain>-<what>` → PR into `develop` →
+review → merge. `main` only receives a reviewed `develop` after mentor approval, which triggers
+the deploy.
+ 
 ---
-
-## Команда
-
-| Роль | Хто | Що зробив(ла) |
+ 
+## Deployment
+ 
+Production runs on **AWS EC2** (Ubuntu, `t3.small`) with a static Elastic IP.
+**Caddy** sits in front of the app as a reverse proxy and gets HTTPS certificates
+from Let's Encrypt automatically.
+ 
+```bash
+# on the server, once
+git clone https://github.com/sofiia-pohuliailo388/online_cinema.git
+cd online_cinema
+cp .env.example .env    # set SECRET_KEY, DOCS_PASSWORD, DOMAIN, APP_BASE_URL, MINIO_PUBLIC_ENDPOINT
+ 
+# start / update
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+ 
+`docker-compose.prod.yml` extends the base file: no `--reload`, two uvicorn workers,
+Caddy on ports 80/443, `restart: unless-stopped` for every service.
+Only ports 22, 80 and 443 are open in the EC2 security group.
+ 
+GitHub secrets used by the deploy workflow: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`.
+ 
+---
+ 
+## Team
+ 
+**Team Sweet Caramels** · Mentor: **Vadym Pusiak**
+ 
+| Role | Member | Contribution |
 |---|---|---|
-| P1 — Lead / інфраструктура | Sofiia Pohuliailo | каркас, Docker, CI/CD, закритий Swagger, Celery і пошта, профіль, адмінка, сповіщення, mypy |
-| P2 — Авторизація | CemXokenc | реєстрація, активація, JWT, паролі, e2e-тести авторизації |
-| P3 — Сервіси | Artem Gusar | email-шаблони, Celery і celery-beat, модель сповіщень |
-| P4 — Каталог | Yelyzaveta Hulchenko | фільми, жанри, фільтри й пошук, CRUD модератора, сідування |
-| P5 — Взаємодії | Andrii Kinash | лайки, коментарі, рейтинги, обране, статистика фільму |
-| P6 — Кошик і замовлення | Bohdan Sarai | кошик, замовлення, перевірки покупок |
-| P7 — Оплата | Artem D | Stripe Checkout, вебхуки, історія платежів, повернення коштів |
+| P1 — Team lead / infrastructure | Sofiia Pohuliailo | project skeleton, Docker, CI/CD, AWS deployment, protected Swagger, Celery and email setup, profile, user admin, notifications API, mypy |
+| P2 — Authentication | Olexandr Plotnikov | registration, activation, JWT, passwords, e2e auth tests |
+| P3 — Services | Artem Gusar | email templates, Celery and Celery Beat, notification model |
+| P4 — Catalog | Yelyzaveta Hulchenko | movies, genres, filters and search, moderator CRUD, seed data |
+| P5 — Interactions | Andrii Kinash | likes, comments, ratings, favorites, movie stats |
+| P6 — Cart and orders | Bohdan Sarai | cart, orders, purchase checks |
+| P7 — Payments | Artem Dmytrashko | Stripe Checkout, webhooks, payment history, refunds |
