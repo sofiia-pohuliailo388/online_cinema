@@ -3,6 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends
 
+from src.core.exceptions import ErrorResponse
 from src.accounts.dependencies import CurrentUser, AdminUser
 from src.core.database import DbSession
 from src.core.pagination import PaginationParams, Page
@@ -19,7 +20,24 @@ from src.orders.service import (
 router = APIRouter(tags=["Order"])
 
 
-@router.post("/orders", status_code=201, response_model=CreatedResponseSchema)
+@router.post(
+    "/orders",
+    status_code=201,
+    response_model=CreatedResponseSchema,
+    summary="Create order",
+    description="Creates a new order from the authenticated user's shopping cart.",
+    responses={
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {"model": ErrorResponse, "description": "Cart or movies not found"},
+        409: {
+            "model": ErrorResponse,
+            "description": (
+                    "Cart is empty, all movies are purchased, "
+                    "or movies are already in pending orders"
+            ),
+        },
+    },
+)
 async def create_order_endpoint(
         db: DbSession,
         user: CurrentUser,
@@ -29,7 +47,19 @@ async def create_order_endpoint(
     return CreatedResponseSchema.model_validate(order)
 
 
-@router.get("/users/me/orders", status_code=200, response_model=Page[OrderReadSchema])
+@router.get(
+    "/users/me/orders",
+    status_code=200,
+    response_model=Page[OrderReadSchema],
+    summary="Get my orders",
+    description="Retrieve a paginated list of orders belonging to the authenticated user.",
+    responses={
+        401: {
+            "model": ErrorResponse,
+            "description": "Authentication required",
+        },
+    },
+)
 async def get_list_own_orders(
         db: DbSession,
         user: CurrentUser,
@@ -46,21 +76,65 @@ async def get_list_own_orders(
     return Page.create(items=items, total=total, params=pagination)
 
 
-@router.get("/orders/{order_id}", status_code=200, response_model=OrderReadSchema)
+@router.get(
+    "/orders/{order_id}",
+    status_code=200,
+    response_model=OrderReadSchema,
+    summary="Get my order by ID",
+    description="Retrieve a specific order belonging to the authenticated user.",
+    responses={
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {
+            "model": ErrorResponse,
+            "description": "Order not found or does not belong to the user",
+        },
+    },
+)
 async def get_own_order_by_id(db: DbSession, user: CurrentUser, order_id: int) -> OrderReadSchema:
     """Retrieve an order belonging to the authenticated user."""
     order = await get_order_by_id(db, user_id=user.id, order_id=order_id)
     return OrderReadSchema.model_validate(order)
 
 
-@router.post("/orders/{order_id}/cancel", status_code=200, response_model=OrderReadSchema)
+@router.post(
+    "/orders/{order_id}/cancel",
+    status_code=200,
+    response_model=OrderReadSchema,
+    summary="Cancel order",
+    description=(
+            "Cancel a pending order belonging to the authenticated user. "
+            "Paid or already canceled orders cannot be canceled."
+    ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        404: {
+            "model": ErrorResponse,
+            "description": "Order not found or does not belong to the user",
+        },
+        409: {"model": ErrorResponse, "description": "Order is already paid or canceled"},
+    },
+)
 async def cancel_own_order(db: DbSession, user: CurrentUser, order_id: int) -> OrderReadSchema:
     """Cancel a pending order belonging to the authenticated user."""
     order = await cancel_order(db, user_id=user.id, order_id=order_id)
     return OrderReadSchema.model_validate(order)
 
 
-@router.get("/orders", status_code=200, response_model=Page[OrderReadSchema])
+@router.get(
+    "/orders",
+    status_code=200,
+    response_model=Page[OrderReadSchema],
+    summary="Get all orders",
+    description=(
+            "Retrieve a paginated list of all orders. "
+            "Administrators can filter orders by user ID, status, "
+            "and creation date range."
+    ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Authentication required"},
+        403: {"model": ErrorResponse, "description": "Administrator privileges required"},
+    },
+)
 async def get_all_orders_for_admin(
         db: DbSession,
         admin: AdminUser,
