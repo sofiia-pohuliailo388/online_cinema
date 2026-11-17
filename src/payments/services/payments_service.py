@@ -13,10 +13,10 @@ from src.accounts.service import get_user_by_id
 from src.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from src.core.pagination import PaginationParams, paginate
 from src.orders.models import Order, OrderItem, StatusEnum
-from src.notifications.service import send_email
 from src.orders.service import mark_order_paid
 from src.payments.models import Payment, PaymentItem, PaymentStatus
 from src.payments.services import stripe_client
+from src.notifications.service import send_email
 
 logger = logging.getLogger(__name__)
 
