@@ -15,6 +15,7 @@ from src.orders.models import Order, OrderItem, StatusEnum
 from src.orders.service import mark_order_paid
 from src.payments.models import Payment, PaymentItem, PaymentStatus
 from src.payments.services import stripe_client
+from src.notifications.service import send_email
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,21 @@ class PaymentResult(NamedTuple):
 def _to_cents(amount: Decimal) -> int:
     return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
+def send_payment_confirmation_email(result: PaymentResult) -> None:
+    """Send the payment confirmation email.
+
+    Args:
+        result: Payment data captured before commit.
+    """
+    send_email(
+        to=result.user_email,
+        subject="Payment confirmation",
+        template="payment_success.html",
+        context={
+            "movie_title": ", ".join(result.movie_titles),
+            "amount": f"{result.amount:.2f} USD",
+        },
+    )
 
 async def create_checkout(db: AsyncSession, user_id: int, email: str, order_id: int) -> str:
     """Recalculate the order total from current movie prices and open a Stripe Checkout Session.

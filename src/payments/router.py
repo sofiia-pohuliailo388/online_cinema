@@ -2,6 +2,7 @@
 import logging
 from datetime import datetime
 
+import background_tasks
 from fastapi import APIRouter, Depends, Request
 
 from src.accounts.dependencies import AdminUser, CurrentUser
@@ -38,10 +39,7 @@ async def stripe_webhook(request: Request, db: DbSession) -> dict:
             result = None
 
         if result is not None:
-            # TODO: send the payment confirmation email here via EmailSender
-            #       (use result.user_id / result.order_id / result.amount).
-            #       Email failures must be logged and must NOT fail the webhook.
-            pass
+            background_tasks.add_task(service.send_payment_confirmation_email, result)
 
     return {"status": "success"}
 
