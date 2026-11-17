@@ -9,6 +9,7 @@ from src.movies.models import Certification, Movie
 from src.orders.models import Order, OrderItem, StatusEnum
 from src.payments.models import Payment
 
+
 async def create_user(db_session, email: str) -> User:
     group = await db_session.scalar(
         select(UserGroup).where(UserGroup.name == UserGroupEnum.USER)
