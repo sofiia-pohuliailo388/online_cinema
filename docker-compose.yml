@@ -35,8 +35,11 @@ services:
     command: celery -A src.tasks.celery_app beat -l info
     depends_on: [redis]
 
+  # S3-compatible storage for avatars. MinIO removed its own images from Docker Hub,
+  # so we use Silo - a maintained MinIO fork with the same API and MINIO_* variables.
+  # Console: http://localhost:9001 (minioadmin / minioadmin).
   minio:
-    image: minio/minio
+    image: docker.io/pgsty/silo:RELEASE.2026-10-26T00-00-00Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin

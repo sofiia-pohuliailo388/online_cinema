@@ -1,19 +1,20 @@
-
 """FastAPI application factory."""
 
 from fastapi import FastAPI
 
 import src.models  # noqa: F401
 
+from src.accounts.admin_router import router as admin_router
+from src.accounts.profile_router import router as profile_router
+from src.accounts.router import router as accounts_router
+from src.cart.router import router as cart_router
 from src.core.docs import setup_protected_docs
 from src.core.exceptions import register_exception_handlers
 from src.interactions.router import router as interactions_router
 from src.movies.router import router as movies_router
+from src.notifications.router import router as notifications_router
 from src.orders.router import router as orders_router
-
 from src.payments.router import router as payments_router
-from src.accounts.router import router as accounts_router
-from src.cart.router import router as cart_router
 
 API_PREFIX = "/api/v1"
 
@@ -30,12 +31,14 @@ def create_app() -> FastAPI:
     setup_protected_docs(app)
 
     app.include_router(movies_router, prefix=API_PREFIX)
-    app.include_router(accounts_router, prefix=API_PREFIX)
+    app.include_router(accounts_router, prefix=API_PREFIX)  # P2
+    app.include_router(profile_router, prefix=API_PREFIX)  # P3
+    app.include_router(admin_router, prefix=API_PREFIX)  # P3
+    app.include_router(notifications_router, prefix=API_PREFIX)  # P3
     app.include_router(interactions_router, prefix=API_PREFIX)
-    app.include_router(cart_router, prefix=API_PREFIX)          # P6
-    app.include_router(payments_router, prefix=API_PREFIX)      # P7
-    app.include_router(orders_router, prefix=API_PREFIX)        # P6
-    # app.include_router(payments_router, prefix=API_PREFIX)      # P7
+    app.include_router(cart_router, prefix=API_PREFIX)  # P6
+    app.include_router(orders_router, prefix=API_PREFIX)  # P6
+    app.include_router(payments_router, prefix=API_PREFIX)  # P7
 
     @app.get("/health", tags=["system"])
     async def health() -> dict[str, str]:

@@ -57,7 +57,7 @@ def apply_movie_filters(stmt: Select[Any], filters: MovieFilterParams) -> Select
                     Director.name.ilike(search_query),
                 )
             )
-            .distinct(Movie.id)
+            .distinct()
         )
 
     if filters.genre_id is not None:

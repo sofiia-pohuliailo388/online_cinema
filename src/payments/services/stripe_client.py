@@ -1,6 +1,7 @@
 """Thin wrapper around the Stripe SDK."""
 import asyncio
 import logging
+from typing import Any
 
 import stripe
 
@@ -13,7 +14,7 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
 async def create_checkout_session(
-    *, order_id: int, customer_email: str, line_items: list[dict]
+    *, order_id: int, customer_email: str, line_items: list[Any]
 ) -> stripe.checkout.Session:
     """Create a Stripe Checkout Session with ``order_id`` stored in metadata.
 

@@ -1,0 +1,35 @@
+# Production overrides. Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Requires DOMAIN in .env (e.g. DOMAIN=16-171-245-95.sslip.io).
+services:
+  app:
+    command: >-
+      sh -c "alembic upgrade head &&
+      uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 2
+      --proxy-headers --forwarded-allow-ips='*'"
+    restart: unless-stopped
+  caddy:
+    image: caddy:2
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [app, minio]
+    restart: unless-stopped
+  db:
+    restart: unless-stopped
+  redis:
+    restart: unless-stopped
+  celery-worker:
+    restart: unless-stopped
+  celery-beat:
+    restart: unless-stopped
+  minio:
+    restart: unless-stopped
+  mailhog:
+    restart: unless-stopped
+
+volumes:
+  caddy_data:

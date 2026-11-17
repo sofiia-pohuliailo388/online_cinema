@@ -225,7 +225,11 @@ async def list_movies(
 
     processed_items = []
     for row in items:
-        if isinstance(row, tuple):
+        if hasattr(row, "_mapping"):
+            movie = row[0]
+            movie.average_rating = float(row._mapping.get("average_rating") or 0.0)
+            movie.likes_count = int(row._mapping.get("likes_count") or 0)
+        elif isinstance(row, (tuple, list)) and len(row) >= 3:
             movie = row[0]
             movie.average_rating = float(row[1]) if row[1] is not None else 0.0
             movie.likes_count = int(row[2]) if row[2] is not None else 0
@@ -233,6 +237,7 @@ async def list_movies(
             movie = row
             movie.average_rating = 0.0
             movie.likes_count = 0
+
         processed_items.append(movie)
 
     return processed_items, total
@@ -245,21 +250,32 @@ async def create_movie(db: AsyncSession, data: MovieCreate) -> Movie:
         ConflictError: if a movie with the same unique constraints exists.
         NotFoundError: if certification, genres, stars or directors do not exist.
     """
-    payload = data.model_dump(exclude={"genre_ids", "star_ids", "director_ids"})
+    cert = await db.get(Certification, data.certification_id)
+    if not cert:
+        raise NotFoundError(f"Certification with ID {data.certification_id} not found")
 
+    payload = data.model_dump(exclude={"genre_ids", "star_ids", "director_ids"})
     movie = Movie(**payload)
 
     if data.genre_ids:
-        genres = await db.scalars(select(Genre).where(Genre.id.in_(data.genre_ids)))
-        movie.genres = list(genres)
+        genres = list(await db.scalars(select(Genre).where(Genre.id.in_(data.genre_ids))))
+        if len(genres) != len(data.genre_ids):
+            raise NotFoundError("One or more genre IDs do not exist.")
+        movie.genres = genres
 
     if data.star_ids:
-        stars = await db.scalars(select(Star).where(Star.id.in_(data.star_ids)))
-        movie.stars = list(stars)
+        stars = list(await db.scalars(select(Star).where(Star.id.in_(data.star_ids))))
+        if len(stars) != len(data.star_ids):
+            raise NotFoundError("One or more star IDs do not exist.")
+        movie.stars = stars
 
     if data.director_ids:
-        directors = await db.scalars(select(Director).where(Director.id.in_(data.director_ids)))
-        movie.directors = list(directors)
+        directors = list(await db.scalars(select(Director).where(
+            Director.id.in_(data.director_ids)
+        )))
+        if len(directors) != len(data.director_ids):
+            raise NotFoundError("One or more director IDs do not exist.")
+        movie.directors = directors
 
     db.add(movie)
     try:
@@ -276,13 +292,18 @@ async def update_movie(db: AsyncSession, movie_id: int, data: MovieUpdate) -> Mo
     """Partially update an existing movie and its relationships.
 
     Raises:
-        NotFoundError: if the movie does not exist.
+        NotFoundError: if the movie does not exist or related keys are invalid.
     """
     movie = await db.get(Movie, movie_id)
     if not movie:
         raise NotFoundError(f"Movie with ID {movie_id} not found")
 
     changes = data.model_dump(exclude_unset=True)
+
+    if "certification_id" in changes and changes["certification_id"] is not None:
+        cert = await db.get(Certification, changes["certification_id"])
+        if not cert:
+            raise NotFoundError(f"Certification with ID {changes['certification_id']} not found")
 
     genre_ids = changes.pop("genre_ids", None)
     star_ids = changes.pop("star_ids", None)
@@ -292,16 +313,22 @@ async def update_movie(db: AsyncSession, movie_id: int, data: MovieUpdate) -> Mo
         setattr(movie, field, value)
 
     if genre_ids is not None:
-        genres = await db.scalars(select(Genre).where(Genre.id.in_(genre_ids)))
-        movie.genres = list(genres)
+        genres = list(await db.scalars(select(Genre).where(Genre.id.in_(genre_ids))))
+        if len(genres) != len(genre_ids):
+            raise NotFoundError("One or more genre IDs do not exist.")
+        movie.genres = genres
 
     if star_ids is not None:
-        stars = await db.scalars(select(Star).where(Star.id.in_(star_ids)))
-        movie.stars = list(stars)
+        stars = list(await db.scalars(select(Star).where(Star.id.in_(star_ids))))
+        if len(stars) != len(star_ids):
+            raise NotFoundError("One or more star IDs do not exist.")
+        movie.stars = stars
 
     if director_ids is not None:
-        directors = await db.scalars(select(Director).where(Director.id.in_(director_ids)))
-        movie.directors = list(directors)
+        directors = list(await db.scalars(select(Director).where(Director.id.in_(director_ids))))
+        if len(directors) != len(director_ids):
+            raise NotFoundError("One or more director IDs do not exist.")
+        movie.directors = directors
 
     await db.commit()
     return await get_movie(db, movie_id)
@@ -465,6 +492,17 @@ async def update_certification(
 
 
 async def delete_certification(db: AsyncSession, certification_id: int) -> None:
+    """Delete a certification that no movie uses.
+
+    Raises:
+        NotFoundError: certification does not exist.
+        ConflictError: at least one movie has this certification.
+    """
     cert = await get_certification(db, certification_id)
+    movies_count = await db.scalar(
+        select(func.count(Movie.id)).where(Movie.certification_id == certification_id)
+    )
+    if movies_count:
+        raise ConflictError("Cannot delete a certification that is used by movies")
     await db.delete(cert)
     await db.commit()
